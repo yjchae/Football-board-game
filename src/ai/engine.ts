@@ -9,14 +9,37 @@ import { claudeProvider, geminiProvider, type ImageInput, type TextProvider } fr
 // 설정에 따라 알맞은 엔진/스캐너를 만들어 주는 진입점
 // ─────────────────────────────────────────────
 
+/** AI 오류: 아이용 짧은 안내 + 보호자가 원인을 볼 수 있는 원문 */
+export class AiError extends Error {
+  constructor(
+    message: string,
+    readonly detail: string,
+  ) {
+    super(message);
+  }
+}
+
 /** 사람이 읽기 쉬운 오류 문구로 바꾼다 */
 export function friendlyError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
-  if (/API key not valid|invalid x-api-key|authentication|401|403/i.test(msg)) return 'API 키가 올바르지 않아요. 키를 다시 확인해 주세요.';
-  if (/429|quota|rate/i.test(msg)) return 'AI 사용 한도를 넘었어요. 잠시 후 다시 해 주세요.';
-  if (/not found|404/i.test(msg)) return '모델 이름을 찾을 수 없어요. 설정에서 모델 이름을 확인해 주세요.';
+  if (/API key not valid|invalid x-api-key|authentication|401|403|PERMISSION_DENIED/i.test(msg)) {
+    return 'API 키가 올바르지 않거나 권한이 없어요. 키를 다시 확인해 주세요.';
+  }
+  // "limit: 0" = 이 모델은 이 키(프로젝트)에서 무료로 쓸 수 있는 양이 아예 없음
+  if (/limit:\s*0\b|free_tier.*limit.*\b0\b/i.test(msg)) {
+    return '이 키로는 선택한 모델의 무료 사용량이 없어요(한도 0). 설정에서 다른 모델을 고르거나, AI Studio에서 결제(유료 등급)를 설정해야 해요.';
+  }
+  if (/429|RESOURCE_EXHAUSTED|quota|rate/i.test(msg)) {
+    return '짧은 시간에 너무 많이 요청했거나 오늘 사용량을 다 썼어요. 잠시 후 다시 하거나 다른 모델을 골라 주세요.';
+  }
+  if (/not found|404|is not supported/i.test(msg)) return '모델 이름을 찾을 수 없어요. 설정에서 "사용 가능한 모델 불러오기"로 골라 주세요.';
   if (/connection|network|fetch/i.test(msg)) return '인터넷 연결 또는 AI 서버 접속에 실패했어요.';
   return msg.slice(0, 120);
+}
+
+function toAiError(err: unknown): AiError {
+  const raw = err instanceof Error ? err.message : String(err);
+  return new AiError(friendlyError(err), raw.slice(0, 600));
 }
 
 function providerFor(settings: AiSettings): TextProvider | null {
@@ -67,7 +90,7 @@ export async function scanCard(settings: AiSettings, image: ImageInput): Promise
     const text = await provider.generate('너는 축구 카드 판독기야. JSON만 출력해.', CARD_SCAN_PROMPT, image);
     return sanitizeCard(extractJson(text));
   } catch (err) {
-    throw new Error(friendlyError(err));
+    throw toAiError(err);
   }
 }
 
@@ -79,7 +102,24 @@ export async function scanTeamPhoto(settings: AiSettings, image: ImageInput): Pr
     const text = await provider.generate('너는 축구 카드 판독기야. JSON만 출력해.', TEAM_SCAN_PROMPT, image);
     return sanitizeTeamScan(extractJson(text));
   } catch (err) {
-    throw new Error(friendlyError(err));
+    throw toAiError(err);
+  }
+}
+
+/** 내 제미나이 키로 쓸 수 있는 모델 목록 (텍스트 생성 가능한 gemini 모델만) */
+export async function listGeminiModels(apiKey: string): Promise<string[]> {
+  try {
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey });
+    const names: string[] = [];
+    for await (const model of await ai.models.list()) {
+      const name = model.name?.replace(/^models\//, '') ?? '';
+      const canGenerate = model.supportedActions?.includes('generateContent') ?? true;
+      if (canGenerate && /^gemini/.test(name) && !/(embedding|tts|image|audio|live)/.test(name)) names.push(name);
+    }
+    return names.sort();
+  } catch (err) {
+    throw toAiError(err);
   }
 }
 
@@ -92,6 +132,6 @@ export async function testConnection(settings: AiSettings): Promise<string> {
     extractJson(text);
     return '연결 성공!';
   } catch (err) {
-    throw new Error(friendlyError(err));
+    throw toAiError(err);
   }
 }

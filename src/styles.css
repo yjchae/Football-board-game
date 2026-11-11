@@ -379,6 +379,10 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
 .engine-card b { font-family: var(--font-display); font-size: 1.3rem; }
 .engine-card span { font-size: 0.8rem; color: var(--muted); }
 .engine-card.on { border-color: var(--accent); background: var(--surface-2); }
+.error-detail { margin-top: 10px; font-size: 0.8rem; color: var(--muted); }
+.error-detail summary { cursor: pointer; }
+.error-detail pre { white-space: pre-wrap; word-break: break-all; background: var(--bg-2); padding: 10px; border-radius: 10px; max-height: 200px; overflow: auto; }
+.settings .row select { background: var(--bg-2); border: 1.5px solid var(--line); border-radius: 12px; padding: 11px 14px; flex: 1; min-width: 200px; }
 .notice-box { margin-top: 24px; padding: 16px; border-radius: 16px; background: var(--bg-2); border: 1px dashed var(--line); color: var(--muted); font-size: 0.85rem; line-height: 1.6; }
 
 /* ─────────── 애니메이션 ─────────── */

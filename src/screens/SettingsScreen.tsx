@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { testConnection } from '../ai/engine';
+import { AiError, listGeminiModels, testConnection } from '../ai/engine';
 import { InstallGuide } from '../components/InstallGuide';
 import type { EngineKind } from '../domain/types';
 import { DEFAULT_SETTINGS, useStore } from '../store/useStore';
@@ -23,8 +23,16 @@ const SPEEDS = [
 export function SettingsScreen() {
   const settings = useStore((s) => s.settings);
   const update = useStore((s) => s.updateSettings);
-  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [status, setStatus] = useState<{ ok: boolean; text: string; detail?: string } | null>(null);
   const [testing, setTesting] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+
+  const failStatus = (err: unknown) => ({
+    ok: false,
+    text: err instanceof Error ? err.message : String(err),
+    detail: err instanceof AiError ? err.detail : undefined,
+  });
 
   async function runTest() {
     setTesting(true);
@@ -32,9 +40,23 @@ export function SettingsScreen() {
     try {
       setStatus({ ok: true, text: await testConnection(settings) });
     } catch (err) {
-      setStatus({ ok: false, text: err instanceof Error ? err.message : String(err) });
+      setStatus(failStatus(err));
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function loadModels() {
+    setLoadingModels(true);
+    setStatus(null);
+    try {
+      const list = await listGeminiModels(settings.geminiKey);
+      setModels(list);
+      if (!list.length) setStatus({ ok: false, text: '이 키로 쓸 수 있는 제미나이 모델이 없어요.' });
+    } catch (err) {
+      setStatus(failStatus(err));
+    } finally {
+      setLoadingModels(false);
     }
   }
 
@@ -63,13 +85,28 @@ export function SettingsScreen() {
             <span>Gemini API 키</span>
             <input type="password" autoComplete="off" value={settings.geminiKey} onChange={(e) => update({ geminiKey: e.target.value.trim() })} placeholder="AIza…" />
           </label>
-          <label className="field">
-            <span>모델 이름</span>
-            <input value={settings.geminiModel} onChange={(e) => update({ geminiModel: e.target.value.trim() || DEFAULT_SETTINGS.geminiModel })} />
-          </label>
+          <div className="field">
+            <span>모델</span>
+            <div className="row">
+              {models.length > 0 ? (
+                <select value={settings.geminiModel} onChange={(e) => { update({ geminiModel: e.target.value }); setStatus(null); }} aria-label="제미나이 모델">
+                  {!models.includes(settings.geminiModel) && <option value={settings.geminiModel}>{settings.geminiModel}</option>}
+                  {models.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              ) : (
+                <input value={settings.geminiModel} onChange={(e) => update({ geminiModel: e.target.value.trim() || DEFAULT_SETTINGS.geminiModel })} aria-label="제미나이 모델" />
+              )}
+              <button className="btn btn--ghost" disabled={!settings.geminiKey || loadingModels} onClick={loadModels}>
+                {loadingModels ? '불러오는 중…' : '📋 사용 가능한 모델 불러오기'}
+              </button>
+            </div>
+          </div>
           <p className="muted small">
             Google AI Studio(aistudio.google.com)에서 본인 구글 계정으로 로그인 → “Get API key”로 키를 만들어 붙여 넣으세요.
-            모델 이름이 바뀌었다면 AI Studio에서 사용 가능한 이름으로 바꿔 주세요.
+            “한도 0” 오류가 나오면 목록에서 <b>flash-lite</b>나 <b>flash</b>처럼 가벼운 모델을 골라 다시 테스트해 보세요.
+          </p>
+          <p className="muted small">
+            ※ Google AI Plus·Pro 같은 <b>제미나이 앱 구독</b>과 <b>API 사용량</b>은 따로 관리돼요. API 한도는 AI Studio의 사용량·결제 화면에서 확인할 수 있어요.
           </p>
         </section>
       )}
@@ -99,6 +136,12 @@ export function SettingsScreen() {
           </button>
           {status && <span className={`status status--${status.ok ? 'ok' : 'error'}`}>{status.text}</span>}
         </div>
+      )}
+      {status?.detail && (
+        <details className="error-detail">
+          <summary>보호자용: 오류 원문 보기</summary>
+          <pre>{status.detail}</pre>
+        </details>
       )}
 
       <section className="panel">

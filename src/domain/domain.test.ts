@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { extractJson, guessRole, sanitizeCard, sanitizeSegment, sanitizeTeamScan } from '../ai/parse';
 import { boxToRect } from '../utils/image';
+import { friendlyError } from '../ai/engine';
 import { createDemoTeams } from '../store/demoTeams';
 import { autoLineup, changeFormation, FORMATIONS, onPitchIds } from './formations';
 import { createLocalEngine, seededRng } from './localEngine';
@@ -211,5 +212,16 @@ describe('팀 단체 사진 스캔', () => {
     const r = boxToRect([0, 900, 1000, 1000], 1000, 1000);
     expect(r.x + r.w).toBeLessThanOrEqual(1000);
     expect(r.y).toBe(0);
+  });
+});
+
+describe('AI 오류 안내', () => {
+  it('무료 한도 0과 일시적 초과, 키 오류를 구분한다', () => {
+    const zero = friendlyError(new Error('{"error":{"code":429,"message":"Quota exceeded for metric: generate_content_free_tier_requests, limit: 0, model: gemini-x","status":"RESOURCE_EXHAUSTED"}}'));
+    expect(zero).toContain('한도 0');
+    const busy = friendlyError(new Error('{"error":{"code":429,"message":"Resource has been exhausted. Please retry in 30s","status":"RESOURCE_EXHAUSTED"}}'));
+    expect(busy).toContain('잠시 후');
+    expect(friendlyError(new Error('API key not valid. Please pass a valid API key.'))).toContain('키');
+    expect(friendlyError(new Error('models/gemini-old is not found for API version v1beta'))).toContain('모델');
   });
 });
