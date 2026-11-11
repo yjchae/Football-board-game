@@ -26,7 +26,16 @@ describe('실존 선수 명단', () => {
     }
   });
 
-  it('5개 리그 모두 선수가 있고 OVR은 1~99 사이', () => {
+  it('새로 추가한 세리에 A·브라질·사우디 리그는 16명(GK2·DF5·MF5·FW4)도 리그 안에서 뽑힌다', () => {
+    for (const league of ['SERIEA', 'BRASILEIRAO', 'SAUDI'] as const) {
+      const squad = draftRandomPlayers({ leagues: [league], size: 16, rng: seededRng(11) });
+      expect(countRoles(squad)).toEqual({ GK: 2, DF: 5, MF: 5, FW: 4 });
+      expect(squad.every((p) => p.league === league)).toBe(true);
+    }
+  });
+
+  it('8개 리그 모두 선수가 있고 OVR은 1~99 사이', () => {
+    expect(LEAGUES).toHaveLength(8);
     for (const league of LEAGUES) expect(REAL_PLAYERS.some((p) => p.league === league.id)).toBe(true);
     for (const p of REAL_PLAYERS) expect(p.overall).toBeGreaterThanOrEqual(1), expect(p.overall).toBeLessThanOrEqual(99);
   });

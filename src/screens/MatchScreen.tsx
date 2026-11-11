@@ -1,5 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createEngine, engineLabel } from '../ai/engine';
+import { unlockNarration } from '../audio/narrator';
+import { unlockSfx } from '../audio/sfx';
+import { MatchHistory } from '../components/MatchHistory';
 import {
   EventFeed,
   HalfSummaryCard,
@@ -11,8 +14,10 @@ import {
 import { confirmMissingTactics, TacticReveal, TacticsBoard } from '../components/TacticNotes';
 import { onPitchIds } from '../domain/formations';
 import { isLastSegmentOfHalf, scoreOf, SEGMENTS } from '../domain/match';
+import { buildMatchRecord } from '../domain/matchRecord';
 import type { Team } from '../domain/types';
 import { useMatch } from '../hooks/useMatch';
+import { narrationBusy, useMatchAudio } from '../hooks/useMatchAudio';
 import { useStore } from '../store/useStore';
 
 // ─────────────────────────────────────────────
@@ -24,7 +29,7 @@ export function MatchScreen({ goTeams }: { goTeams(): void }) {
   const [match, setMatch] = useState<{ home: Team; away: Team; key: number } | null>(null);
 
   if (match) {
-    return <LiveMatch key={match.key} home={match.home} away={match.away} onExit={() => setMatch(null)} />;
+    return <LiveMatch key={match.key} matchId={`m-${match.key}`} home={match.home} away={match.away} onExit={() => setMatch(null)} />;
   }
   return <MatchSetup teams={teams} goTeams={goTeams} onStart={(home, away) => setMatch({ home, away, key: Date.now() })} />;
 }
@@ -75,6 +80,8 @@ function MatchSetup({ teams, goTeams, onStart }: { teams: Team[]; goTeams(): voi
         </button>
       </div>
       <p className="muted small center">전반 45분 → 하프타임(교체·포지션 정비) → 후반 45분. 경기 중에도 ‘작전 타임’으로 교체할 수 있어요.</p>
+
+      <MatchHistory />
     </div>
   );
 }
@@ -97,8 +104,10 @@ function TeamPicker({ label, teams, value, onChange }: { label: string; teams: T
 
 // ─────────────── 경기 진행 ───────────────
 
-function LiveMatch({ home, away, onExit }: { home: Team; away: Team; onExit(): void }) {
+function LiveMatch({ matchId, home, away, onExit }: { matchId: string; home: Team; away: Team; onExit(): void }) {
   const settings = useStore((s) => s.settings);
+  const updateSettings = useStore((s) => s.updateSettings);
+  const addMatchRecord = useStore((s) => s.addMatchRecord);
   const [fallbackMsg, setFallbackMsg] = useState<string | null>(null);
   const engine = useMemo(
     () => createEngine(settings, (reason) => setFallbackMsg(`AI 연결 문제로 오프라인 엔진이 대신 진행했어요. ${reason}`)),
@@ -106,8 +115,24 @@ function LiveMatch({ home, away, onExit }: { home: Team; away: Team; onExit(): v
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
-  const { state, kickoff, requestTimeout, resume, updateSide, setTactic } = useMatch({ home, away }, engine, settings.playbackMs);
+  const { state, kickoff, requestTimeout, resume, updateSide, setTactic } = useMatch(
+    { home, away },
+    engine,
+    settings.playbackMs,
+    narrationBusy(settings.voice),
+  );
   const sides = { home: state.home, away: state.away };
+
+  // 소리: 휘슬·골 함성 + 음성 해설
+  useMatchAudio({ events: state.events, homeName: home.name, awayName: away.name, sfx: settings.sfx, voice: settings.voice });
+  const soundOn = settings.sfx || settings.voice;
+  const toggleSound = () => updateSettings(soundOn ? { sfx: false, voice: false } : { sfx: true, voice: true });
+
+  // 경기가 끝나면 기록 저장 (같은 경기는 id가 같아서 한 번만 남는다)
+  useEffect(() => {
+    if (state.phase === 'fulltime') addMatchRecord(buildMatchRecord(matchId, sides, state.events));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase]);
   const score = scoreOf(state.events);
   const half = SEGMENTS[state.segIndex]?.half ?? 1;
 
@@ -121,7 +146,11 @@ function LiveMatch({ home, away, onExit }: { home: Team; away: Team; onExit(): v
 
   // 전술을 안 쓴 팀이 있으면 확인 후 진행 (경기 전 = 전반 전술, 하프타임 = 후반 전술)
   const startHalf = (tacticHalf: 1 | 2) => {
-    if (confirmMissingTactics(sides, state.tactics, tacticHalf)) kickoff();
+    if (!confirmMissingTactics(sides, state.tactics, tacticHalf)) return;
+    // 버튼을 누른 이 순간에 오디오를 깨워야 브라우저가 소리를 막지 않는다
+    unlockSfx();
+    if (settings.voice) unlockNarration();
+    kickoff();
   };
 
   const firstHalfEvents = state.events.filter((e) => e.minute <= 45);
@@ -141,6 +170,14 @@ function LiveMatch({ home, away, onExit }: { home: Team; away: Team; onExit(): v
         {state.phase === 'playing' && !state.fetching && (
           <span className="live-dot">LIVE · {engine.label}</span>
         )}
+        <button
+          className={`sound-toggle ${soundOn ? 'on' : ''}`}
+          onClick={toggleSound}
+          aria-pressed={soundOn}
+          data-testid="sound-toggle"
+        >
+          {soundOn ? '🔊 소리 켬' : '🔇 소리 끔'}
+        </button>
         {state.notice && <span className="status status--warn">{state.notice}</span>}
         {fallbackMsg && (
           <span className="status status--warn" onClick={() => setFallbackMsg(null)}>{fallbackMsg}</span>

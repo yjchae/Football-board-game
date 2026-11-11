@@ -14,8 +14,11 @@ const ENGINES: { value: EngineKind; title: string; desc: string }[] = [
   { value: 'local', title: '오프라인', desc: '키 없이 능력치 기반으로 진행' },
 ];
 
-const SPEEDS = [
-  { ms: 2200, label: '천천히' },
+/** 중계 속도 = 장면 하나를 보여 주는 시간 (기존 저장값 2200·1400·700은 그대로 유지) */
+export const SPEEDS = [
+  { ms: 4500, label: '아주 천천히' },
+  { ms: 3200, label: '천천히' },
+  { ms: 2200, label: '조금 천천히' },
   { ms: 1400, label: '보통' },
   { ms: 700, label: '빠르게' },
 ];
@@ -153,6 +156,28 @@ export function SettingsScreen() {
             </button>
           ))}
         </div>
+        <p className="muted small">음성 해설이 켜져 있으면 해설이 끝날 때까지 다음 장면을 기다려요.</p>
+      </section>
+
+      <section className="panel">
+        <span className="field-label">소리</span>
+        <div className="toggles">
+          <Toggle
+            label="🔔 효과음"
+            desc="킥오프·종료 휘슬, 골 함성"
+            on={settings.sfx}
+            onChange={(sfx) => update({ sfx })}
+            testId="toggle-sfx"
+          />
+          <Toggle
+            label="🎙️ 음성 해설"
+            desc="중계 상황을 목소리로 읽어 줘요"
+            on={settings.voice}
+            onChange={(voice) => update({ voice })}
+            testId="toggle-voice"
+          />
+        </div>
+        <p className="muted small">음성 해설은 기기에 설치된 한국어 목소리를 써요. 목소리가 없거나 무음 모드면 들리지 않을 수 있어요.</p>
       </section>
 
       <aside className="notice-box">
@@ -160,5 +185,19 @@ export function SettingsScreen() {
         이 기기(홈 화면 앱)로 게임하는 사람만 이 키를 사용해요. AI 서버(구글/Anthropic)로만 직접 전송돼요. AI 사용량에 따라 요금이 나올 수 있으니 보호자 계정으로 관리해 주세요.
       </aside>
     </div>
+  );
+}
+
+function Toggle({ label, desc, on, onChange, testId }: { label: string; desc: string; on: boolean; onChange(next: boolean): void; testId: string }) {
+  return (
+    <button className={`toggle ${on ? 'on' : ''}`} role="switch" aria-checked={on} onClick={() => onChange(!on)} data-testid={testId}>
+      <span className="toggle__text">
+        <b>{label}</b>
+        <small>{desc}</small>
+      </span>
+      <span className="toggle__track" aria-hidden>
+        <span className="toggle__thumb" />
+      </span>
+    </button>
   );
 }

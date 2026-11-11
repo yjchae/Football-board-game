@@ -163,6 +163,7 @@ export function reducer(state: MatchState, action: Action): MatchState {
         side: null,
         text: segIndex === 0 ? '🎉 킥오프! 경기가 시작됩니다!' : '📣 후반전이 시작됩니다!',
         highlight: false,
+        cue: segIndex === 0 ? 'kickoff' : 'second-half',
       };
       const changed = segIndex === 3 ? tacticChangeEvents(state, minute) : [];
       return { ...state, phase: 'playing', segIndex, segmentLoaded: false, clock: minute, events: [...state.events, info, ...changed] };
@@ -203,6 +204,7 @@ export function reducer(state: MatchState, action: Action): MatchState {
           side: null,
           text: seg.half === 1 ? '⏸️ 전반전 종료 휘슬!' : '🏁 경기 종료 휘슬!',
           highlight: false,
+          cue: seg.half === 1 ? 'halftime' : 'fulltime',
         };
         return {
           ...atEnd,
@@ -300,10 +302,25 @@ interface Prefetch {
   promise: Promise<SegmentResult>;
 }
 
-export function useMatch(teams: { home: Team; away: Team }, engine: MatchEngine, playbackMs: number) {
+/** 해설 음성이 길어질 때 다음 장면을 최대 얼마나 기다릴지 */
+export const MAX_HOLD_MS = 8000;
+const HOLD_POLL_MS = 200;
+
+/**
+ * @param isBusy 음성 해설처럼 "아직 말하는 중"인지 알려 주는 함수.
+ *               true인 동안은 다음 장면 공개를 미룬다 (최대 MAX_HOLD_MS).
+ */
+export function useMatch(
+  teams: { home: Team; away: Team },
+  engine: MatchEngine,
+  playbackMs: number,
+  isBusy: () => boolean = () => false,
+) {
   const [state, dispatch] = useReducer(reducer, teams, init);
   const requested = useRef<number | null>(null);
   const prefetch = useRef<Prefetch | null>(null);
+  const busyRef = useRef(isBusy);
+  busyRef.current = isBusy;
 
   // 1) 구간 이벤트 요청 (React StrictMode 중복 실행 방지)
   useEffect(() => {
@@ -343,7 +360,19 @@ export function useMatch(teams: { home: Team; away: Team }, engine: MatchEngine,
   useEffect(() => {
     if (state.phase !== 'playing' || !state.segmentLoaded) return;
     const delay = state.queue.length ? playbackMs : playbackMs / 2;
-    const timer = setTimeout(() => dispatch({ type: state.queue.length ? 'REVEAL' : 'SEGMENT_END' }), delay);
+    const action = state.queue.length ? 'REVEAL' : 'SEGMENT_END';
+    let held = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    // 정해진 시간이 지나도 해설이 아직 말하는 중이면 조금씩 더 기다린다
+    const tick = () => {
+      if (busyRef.current() && held < MAX_HOLD_MS) {
+        held += HOLD_POLL_MS;
+        timer = setTimeout(tick, HOLD_POLL_MS);
+        return;
+      }
+      dispatch({ type: action });
+    };
+    timer = setTimeout(tick, delay);
     return () => clearTimeout(timer);
   }, [state.phase, state.segmentLoaded, state.queue, playbackMs]);
 

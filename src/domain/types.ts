@@ -95,7 +95,12 @@ export interface MatchEvent {
   text: string;
   /** 하이라이트 장면 여부 */
   highlight: boolean;
+  /** 휘슬 효과음을 낼 경기 흐름 신호 (킥오프·하프 종료 등) */
+  cue?: MatchCue;
 }
+
+/** 경기 흐름 신호 → 효과음 종류를 고르는 데 쓴다 */
+export type MatchCue = 'kickoff' | 'second-half' | 'halftime' | 'fulltime';
 
 export interface HalfSummary {
   half: 1 | 2;
@@ -133,4 +138,27 @@ export interface AiSettings {
   claudeModel: string;
   /** 이벤트 재생 속도 (ms) */
   playbackMs: number;
+  /** 효과음 (휘슬·골 함성) */
+  sfx: boolean;
+  /** 음성 해설 (브라우저 음성 합성) */
+  voice: boolean;
+}
+
+// ─────────────── 경기 기록 ───────────────
+
+/** 기록에 남길 팀 정보 (팀이 나중에 지워져도 기록은 그대로 보이게 복사해 둔다) */
+export interface RecordTeam {
+  name: string;
+  emoji: string;
+  color: string;
+}
+
+export interface MatchRecord {
+  id: string;
+  /** 경기 종료 시각 (ISO 문자열) */
+  playedAt: string;
+  home: RecordTeam;
+  away: RecordTeam;
+  score: { home: number; away: number };
+  scorers: { side: Side; name: string; minute: number }[];
 }
