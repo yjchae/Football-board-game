@@ -237,6 +237,24 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
 .add-card--team { border-color: #4dd7ff; color: #4dd7ff; background: rgba(77, 215, 255, 0.05); }
 .add-card--team span { font-size: 1.6rem; letter-spacing: -0.3em; }
 .modal__panel--lg { width: min(820px, 100%); }
+
+/* ─────────── 실존 선수 랜덤 뽑기 ─────────── */
+.add-card--random { border-color: #ffb547; color: #ffb547; background: rgba(255, 181, 71, 0.05); }
+.league-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.league-chip {
+  border: 1px solid var(--line); background: var(--bg-2); color: var(--muted); padding: 8px 14px; border-radius: 999px;
+  font-weight: 700; transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.league-chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.draft-roll { margin: 6px 0 14px; font-size: 1.05rem; }
+.draft-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.draft-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; color: #1b1607; animation: rise 0.3s ease-out both; }
+.draft-card__ovr { display: flex; flex-direction: column; align-items: center; min-width: 40px; font-family: var(--font-num); line-height: 1.1; }
+.draft-card__ovr strong { font-size: 1.4rem; }
+.draft-card__ovr span { font-size: 0.72rem; font-weight: 700; }
+.draft-card__info { display: flex; flex-direction: column; min-width: 0; }
+.draft-card__info b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.draft-card__info small { opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .check { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; cursor: pointer; }
 .check input, .bulk-row > input[type='checkbox'] { width: 22px; height: 22px; accent-color: var(--accent); flex-shrink: 0; }
 .bulk-pick { display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center; }
