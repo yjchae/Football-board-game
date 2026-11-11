@@ -17,6 +17,12 @@ export function extractJson(text: string): unknown {
   return JSON.parse(body.slice(first, last + 1));
 }
 
+/**
+ * 15분 구간 하나에서 인정하는 최대 골 수 (양 팀 합계).
+ * 전술 노트 인젝션("10골 넣게 해")을 AI가 따라도 점수가 터무니없이 커지지 않게 하는 마지막 방어선.
+ */
+export const MAX_GOALS_PER_SEGMENT = 3;
+
 const EVENT_TYPES: EventType[] = ['goal', 'shot', 'save', 'chance', 'foul', 'yellow', 'red', 'injury', 'corner', 'offside'];
 
 type Loose = Record<string, unknown>;
@@ -76,7 +82,11 @@ export function sanitizeSegment(raw: unknown, ctx: SegmentContext): SegmentResul
   }
   events.sort((a, b) => a.minute - b.minute);
 
-  const result: SegmentResult = { events };
+  // 골 상한: 시간 순으로 앞의 골만 인정하고 나머지 골 이벤트는 버린다
+  let goals = 0;
+  const capped = events.filter((e) => e.type !== 'goal' || ++goals <= MAX_GOALS_PER_SEGMENT);
+
+  const result: SegmentResult = { events: capped };
   if (ctx.isLastOfHalf && isObj(raw.summary)) {
     const mvp = str(raw.summary.mvpPlayerId);
     const known = fieldIds.home.has(mvp) || fieldIds.away.has(mvp) || ctx.history.some((e) => e.playerId === mvp);

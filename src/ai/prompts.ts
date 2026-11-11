@@ -55,13 +55,20 @@ function describeSide(s: SideContext): string {
 const sideName = (s: SideContext) => (s.side === 'home' ? '홈' : '원정');
 const keyNames = (keys: TacticKey[]) => keys.map((k) => TACTIC_INFO[k].label).join(', ');
 
+/** <<< / >>>를 더 이상 없을 때까지 지운다 (지운 자리에서 새 경계가 생기는 "<<>>><" 같은 경우까지) */
+function stripBoundaries(text: string): string {
+  let prev: string;
+  let cur = text;
+  do {
+    prev = cur;
+    cur = cur.replace(/<{3,}|>{3,}/g, '');
+  } while (cur !== prev);
+  return cur;
+}
+
 /** 아이가 쓴 원문을 프롬프트에 안전하게 넣는다: 줄바꿈 제거, 200자, <<< >>> 경계 깨기 방지 */
 export function quoteTactic(text: string): string {
-  const clean = text
-    .replace(/\s+/g, ' ')
-    .slice(0, TACTIC_MAX)
-    .replace(/<{3,}|>{3,}/g, '')
-    .trim();
+  const clean = stripBoundaries(text.replace(/\s+/g, ' ').slice(0, TACTIC_MAX)).trim();
   return `<<<${clean}>>>`;
 }
 

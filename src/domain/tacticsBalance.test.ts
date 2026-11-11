@@ -207,10 +207,8 @@ describe(`전술 공정성 B9~B14 (오프라인 엔진, ${GAMES}경기, 실제 �
     expect(totalGoals(bal)).toBeLessThanOrEqual(6);
   });
 
-  // ⚠️ 알려진 결함 QA-T1 (docs/08-QA-전술기능-보고서.md): 공격적끼리 평균 총득점 5.12~5.14골로 팀장 기준 5.0골 초과.
-  //    결함이 남아 있는 동안 전체 테스트가 빨갛게 되지 않도록 it.fails로 둔다.
-  //    보정값을 고쳐 기준을 만족하면 이 테스트가 "실패"로 바뀌므로, 그때 it.fails → it 로 바꿀 것.
-  it.fails('팀장 기준: 공격적끼리 평균 총득점 ≤ 5.0골', { timeout: 300_000 }, async () => {
+  // QA-T1 수정 완료: attacking chancesMul 1.15→1.12, goalAdd +0.005→0 (1,000/2,000/10,000경기 4.83/4.88/4.86골)
+  it('팀장 기준: 공격적끼리 평균 총득점 ≤ 5.0골', { timeout: 300_000 }, async () => {
     const atk = await run(strong, mirror, { home: CHIP.attacking, away: CHIP.attacking });
     log('팀장 기준 attacking끼리', atk);
     expect(totalGoals(atk)).toBeLessThanOrEqual(5.0);

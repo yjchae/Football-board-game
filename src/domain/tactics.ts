@@ -120,7 +120,8 @@ export function normalizeTactic(text: string): string {
 
 const KEYWORDS: Record<TacticKey, string[]> = {
   attacking: ['공격적', '공격', '닥공', '닥치고공격', '총공격', '몰아붙', '몰아쳐', '맹공', '공세', '전진', '올라가', '슛많이', '슈팅많이', '골많이', '적극적'],
-  defensive: ['수비적', '수비', '지키', '지켜', '막아', '잠그', '잠가', '버스', '텐백', '철벽', '단단하게', '내려서', '뒤로내려', '안전하게', '실점하지', '골안먹'],
+  // '실점하지않'·'실점안'은 부정 어미가 키워드 안에 들어 있는 복합어 (뒤의 '않'에 무효화되지 않도록 통째로 등록)
+  defensive: ['수비적', '수비', '지키', '지켜', '막아', '잠그', '잠가', '버스', '텐백', '철벽', '단단하게', '내려서', '뒤로내려', '안전하게', '실점하지않', '실점안', '골안먹'],
   counter: ['역습', '카운터', 'counter', '반격', '속공', '기습', '뒷공간', '빈틈노려', '빠르게치고', '역습공격'],
   possession: ['점유', '짧은패스', '패스많이', '패스플레이', '패스로', '티키타카', '빌드업', '공소유', '볼소유', '공을오래', '천천히'],
   press: ['압박', '프레싱', '프레스', 'pressing', '강하게달려', '공뺏', '뺏어', '빼앗', '몸싸움', '거칠게', '압박수비'],
@@ -132,7 +133,8 @@ const KEYWORDS: Record<TacticKey, string[]> = {
 
 /** 선수를 부르는 말 → 전술로 세지 않는다 */
 const EXCLUDED = ['공격수', '수비수', '미드필더', '골키퍼', '측면수비'];
-const NEGATIONS = ['말고', '하지마', '안해', '금지', '빼고', '않'];
+// 공백을 지우고 비교하므로 "하지 말자"·"안 돼"도 잡힌다
+const NEGATIONS = ['말고', '하지마', '하지말', '안해', '안돼', '안되', '금지', '빼고', '않', '싫어'];
 const GUARD_WORDS = ['막', '조심', '대비', '주의'];
 const EMPHASIS = ['아주', '엄청', '완전', '매우', '정말', '최대한', '무조건'];
 const BOOST = 1.25;
@@ -226,12 +228,13 @@ export function parseTactic(text: string): TacticKey[] {
 // ─────────────── 보정값 (06 문서 5-2절) ───────────────
 // 배율은 1 대신 "변화량"으로 적는다 (예: chancesMul 1.15 → +0.15).
 // 팀장 결정: attacking의 concedeMul 1.10→1.06, concedeGoalAdd +0.010→+0.006 (공격적끼리 총득점 과다 방지)
+// QA-T1 반영: attacking의 chancesMul 1.15→1.12, goalAdd +0.005→0 (공격적끼리 총득점 ≤ 5.0골, 실점 +10% 이상 유지)
 
 type Delta = Partial<Modifiers>;
 
 const KEY_DELTA: Record<TacticKey, Delta> = {
   balanced: {},
-  attacking: { chancesMul: 0.15, concedeMul: 0.06, goalAdd: 0.005, concedeGoalAdd: 0.006 },
+  attacking: { chancesMul: 0.12, concedeMul: 0.06, goalAdd: 0, concedeGoalAdd: 0.006 },
   defensive: { chancesMul: -0.15, concedeMul: -0.12, goalAdd: -0.005, concedeGoalAdd: -0.012 },
   counter: { chancesMul: -0.12, concedeMul: -0.03, goalAdd: 0.02 },
   possession: { controlAdd: 0.04, goalAdd: -0.015, foulMul: -0.15 },

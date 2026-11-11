@@ -72,7 +72,7 @@ describe('B0 회귀: 전술이 없으면 기존 엔진과 완전히 같다', () 
 
 // ─────────────── 방향성 (균형 vs 균형 대비) ───────────────
 
-const GAMES = 300;
+const GAMES = 1000;
 
 interface Totals {
   shots: number; // 슈팅(골 포함)
@@ -119,6 +119,7 @@ describe('전술 방향성 (시드 고정, 홈 전술 vs 균형)', () => {
     expect(await change('공격적으로 몰아붙이자!', (t) => t.shots)).toBeGreaterThan(0.1);
     expect(await change('공격적으로 몰아붙이자!', (t) => t.goals)).toBeGreaterThan(0.05);
     expect(await change('공격적으로 몰아붙이자!', (t) => t.oppShots)).toBeGreaterThan(0.02);
+    expect(await change('공격적으로 몰아붙이자!', (t) => t.conceded)).toBeGreaterThan(0.1); // 팀장 기준: 실점 +10% 이상
   });
   it('B2 수비적: 슈팅·실점·상대 슈팅이 줄어든다', async () => {
     expect(await change('수비를 단단하게 지키자!', (t) => t.shots)).toBeLessThan(-0.08);

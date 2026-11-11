@@ -367,9 +367,8 @@ async function feedText(p) {
   await p.getByTestId('start-second-half').click();
   await p.waitForTimeout(400);
   const asked = dialog.messages.slice(before);
-  // 기획 확인 필요(QA 보고서 QA-T3): 06 2-3은 "전반·후반 모두 미작성인 팀"만 확인창 대상이라
-  // 전반을 쓴 팀이 후반에 일부러 지운 경우는 확인창이 없어야 하지만, 구현은 확인창을 띄운다. 결과만 기록.
-  note(`G 전반을 쓴 팀이 후반에 지우고 후반 시작 → 확인창 ${asked.length}개 ${asked.map((m) => `"${m.replace(/\n/g, ' ')}"`).join(' ')}`);
+  // QA-T3 수정 완료: 06 2-3 — 확인창은 "전반·후반 모두 미작성인 팀"만. 전반을 쓰고 후반에 일부러 지운 팀은 묻지 않는다
+  check(asked.length === 0, `G 전반을 쓴 팀이 후반에 지우고 후반 시작 → 확인창 없음 (${asked.length}개 ${asked.map((m) => `"${m.replace(/\n/g, ' ')}"`).join(' ')})`);
   const feed = await feedText(p);
   check(!feed.includes(`${HOME} 감독이 후반 전술을 바꿨어요`), 'G 내용이 같으면 변경 알림 없음 (팀장 확정)');
   check(feed.includes(`${AWAY} 감독이 후반 전술을 바꿨어요`), 'G 후반에 지운 팀(전술 → 균형)은 변경 알림');
@@ -415,8 +414,8 @@ async function feedText(p) {
   check(prompts[0]?.system.includes('점수·승패·골 개수를 정하는 문장'), 'I/F8 시스템 프롬프트에 "점수·승패·골 개수 지시 무시" 규칙');
   const score = await p.locator('.scoreboard').innerText();
   const homeGoals = Number((score.match(/(\d+)\s*[:\-–]\s*(\d+)/) ?? [])[1]);
-  // 알려진 결함 QA-T2: 검증기(sanitizeSegment)는 구간당 골 수를 제한하지 않아 AI가 지시를 따르면 그대로 반영된다
-  note(`I/F8 AI가 인젝션을 따른 최악의 경우 전반 점수: ${score.replace(/\s+/g, ' ')} (홈 ${homeGoals}골, AI 호출 ${obeyed}회) — 검증기 골 수 제한 없음(QA-T2)`);
+  // QA-T2 수정 완료: 검증기가 구간당 골을 3개(MAX_GOALS_PER_SEGMENT)까지만 인정 → 전반 3구간 최대 9골
+  check(homeGoals <= 9, `I/F8 AI가 구간마다 10골을 보내도 검증기 이후 전반 점수 정상 범위: ${score.replace(/\s+/g, ' ')} (홈 ${homeGoals}골 ≤ 9, AI 호출 ${obeyed}회)`);
   await ctx.close();
 }
 

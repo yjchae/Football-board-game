@@ -105,11 +105,12 @@ describe('T3 최대 3개 + 상한', () => {
     expect(tacticModifiers(analyzeTactic('평소처럼 균형 있게!'), analyzeTactic(''))).toEqual(NEUTRAL);
   });
 
-  it('팀장 결정: 공격적 전술의 실점 쪽 보정은 1.06 / +0.006', () => {
+  it('팀장 결정: 공격적 전술 보정은 기회 1.12 / 골 0 / 실점 쪽 1.06 / +0.006', () => {
     const m = tacticModifiers(parsed(['attacking']), BALANCED);
     expect(m.concedeMul).toBeCloseTo(1.06, 10);
     expect(m.concedeGoalAdd).toBeCloseTo(0.006, 10);
-    expect(m.chancesMul).toBeCloseTo(1.15, 10);
+    expect(m.chancesMul).toBeCloseTo(1.12, 10);
+    expect(m.goalAdd).toBe(0);
   });
 });
 

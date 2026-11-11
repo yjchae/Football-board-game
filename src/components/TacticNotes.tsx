@@ -65,11 +65,17 @@ function cardCopy(status: TacticStatus, half: Half): CardCopy {
 // ─────────────── 킥오프 / 후반 시작 확인 ───────────────
 
 /**
+ * 확인 대상: 경기 전엔 전반 전술이 없는 팀, 하프타임엔 전반·후반 모두 미작성인 팀 (06 2-3).
+ * 전반에 쓴 팀이 하프타임에 일부러 지운 경우는 감독의 선택이므로 다시 묻지 않는다.
+ */
+const lacksTactic = (note: TacticNote, half: Half) => (half === 1 ? !note.first : !note.first && !note.second);
+
+/**
  * 전술을 안 쓴 팀이 있으면 확인창을 띄운다. 진행해도 되면 true.
  * 취소하면 첫 번째 미작성 팀 카드로 포커스를 옮긴다.
  */
 export function confirmMissingTactics(sides: Sides, tactics: Record<Side, TacticNote>, half: Half): boolean {
-  const missing = SIDES.filter((s) => tacticStatus(tactics[s], half) === 'empty');
+  const missing = SIDES.filter((s) => lacksTactic(tactics[s], half));
   if (!missing.length) return true;
 
   const who = missing.length === 2 ? '두 팀 모두' : `${sides[missing[0]].team.emoji} ${sides[missing[0]].team.name} 감독님이`;

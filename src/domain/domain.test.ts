@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractJson, guessRole, sanitizeCard, sanitizeSegment, sanitizeTeamScan } from '../ai/parse';
+import { extractJson, guessRole, MAX_GOALS_PER_SEGMENT, sanitizeCard, sanitizeSegment, sanitizeTeamScan } from '../ai/parse';
 import { boxToRect } from '../utils/image';
 import { friendlyError, isPermanentError } from '../ai/engine';
 import { createDemoTeams } from '../store/demoTeams';
@@ -160,6 +160,30 @@ describe('AI 응답 검증', () => {
     expect(r.events).toHaveLength(1);
     expect(r.events[0].minute).toBe(15);
     expect(r.events[0].highlight).toBe(true);
+  });
+
+  it('구간당 골은 3개까지만, 시간 순으로 앞의 골을 남긴다 (QA-T2)', () => {
+    const ctx = makeCtx(0);
+    const home = ctx.home.onPitch.find((f) => f.slotRole === 'FW')!.player;
+    const away = ctx.away.onPitch.find((f) => f.slotRole === 'FW')!.player;
+    const goal = (minute: number, side: 'home' | 'away', id: string) => ({ minute, type: 'goal', side, playerId: id, text: `${minute}분 골` });
+    const r = sanitizeSegment(
+      {
+        events: [
+          goal(12, 'home', home.id),
+          goal(3, 'away', away.id),
+          { minute: 6, type: 'shot', side: 'home', playerId: home.id, text: '슛' },
+          goal(9, 'home', home.id),
+          goal(5, 'home', home.id),
+          goal(14, 'away', away.id),
+        ],
+      },
+      ctx,
+    );
+    const goals = r.events.filter((e) => e.type === 'goal');
+    expect(MAX_GOALS_PER_SEGMENT).toBe(3);
+    expect(goals.map((e) => e.minute)).toEqual([3, 5, 9]);
+    expect(r.events.some((e) => e.type === 'shot')).toBe(true); // 골이 아닌 이벤트는 그대로
   });
 
   it('팀을 잘못 적은 선수는 실제 소속팀으로 바로잡는다', () => {
