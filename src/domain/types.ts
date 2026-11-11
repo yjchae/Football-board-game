@@ -43,11 +43,19 @@ export interface Formation {
   slots: FormationSlot[];
 }
 
+/** 경기장 좌표(%) — x: 왼→오, y: 위(상대 골문)→아래(우리 골문) */
+export interface Point {
+  x: number;
+  y: number;
+}
+
 /** 라인업: 어떤 자리에 누가 서 있는지 */
 export interface Lineup {
   formationId: string;
   /** slotId → playerId (빈 자리는 null) */
   slots: Record<string, string | null>;
+  /** 드래그로 옮긴 자리의 좌표 (없으면 포메이션 기본 위치) */
+  positions?: Record<string, Point>;
 }
 
 export interface Team {

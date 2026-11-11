@@ -169,6 +169,7 @@ function TeamDetail({ team }: { team: Team }) {
             players={team.players}
             lineup={team.lineup}
             color={team.color}
+            onResetPositions={() => setLineup(team.id, { ...team.lineup, positions: undefined })}
             onDrop={(pid, target) => {
               const result = applyDrop(team.lineup, pid, target);
               setMessage(result.error ?? null);

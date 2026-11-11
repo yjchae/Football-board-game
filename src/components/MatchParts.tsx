@@ -257,6 +257,7 @@ export function TacticsPanel({ sides, onUpdate }: TacticsProps) {
         unavailable={ms.unavailable}
         injured={ms.injured}
         benchTitle="벤치 (끌어서 교체)"
+        onResetPositions={() => onUpdate(tab, { ...ms, lineup: { ...ms.lineup, positions: undefined } })}
         onDrop={(pid, target) => {
           const result = applyDrop(ms.lineup, pid, target, {
             matchMode: true,

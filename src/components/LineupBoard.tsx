@@ -1,22 +1,26 @@
 import {
   DndContext,
+  pointerWithin,
   PointerSensor,
   TouchSensor,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { fitMultiplier } from '../domain/match';
-import { getFormation } from '../domain/formations';
 import type { DropTarget } from '../domain/lineupOps';
-import type { Lineup, Player } from '../domain/types';
+import { resolveSlots, shapeName } from '../domain/positions';
+import type { Lineup, Player, Point } from '../domain/types';
 import { PlayerAvatar } from './PlayerCard';
 
 // ─────────────────────────────────────────────
 // 포지션 보드: 드래그앤드롭 + 탭 두 번(선택→목적지)으로 선수 이동
+// - 다른 선수 위에 놓기: 자리 바꾸기 / 교체
+// - 빈 잔디 위에 놓기: 그 위치로 자유롭게 이동 (위치에 따라 역할이 정해짐)
 // 실제 이동 규칙은 부모가 lineupOps.applyDrop으로 처리한다.
 // ─────────────────────────────────────────────
 
@@ -29,16 +33,21 @@ interface Props {
   unavailable?: string[];
   injured?: string[];
   benchTitle?: string;
+  /** 옮긴 위치를 포메이션 기본 위치로 되돌리기 */
+  onResetPositions?(): void;
 }
 
-export function LineupBoard({ players, lineup, color, onDrop, unavailable = [], injured = [], benchTitle = '벤치' }: Props) {
+export function LineupBoard(props: Props) {
+  const { players, lineup, color, onDrop, unavailable = [], injured = [], benchTitle = '벤치', onResetPositions } = props;
   const [selected, setSelected] = useState<string | null>(null);
+  const pitchRef = useRef<HTMLDivElement | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 8 } }),
   );
 
-  const formation = getFormation(lineup.formationId);
+  const slots = resolveSlots(lineup);
+  const slotOf = (playerId: string) => Object.keys(lineup.slots).find((k) => lineup.slots[k] === playerId);
   const byId = new Map(players.map((p) => [p.id, p]));
   const onPitch = new Set(Object.values(lineup.slots).filter(Boolean) as string[]);
   const bench = players.filter((p) => !onPitch.has(p.id));
@@ -48,11 +57,55 @@ export function LineupBoard({ players, lineup, color, onDrop, unavailable = [], 
     onDrop(playerId, target);
   };
 
-  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+  /** 화면 좌표 → 경기장 좌표(%) */
+  const toPitchPoint = (clientX: number, clientY: number): Point | null => {
+    const rect = pitchRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return { x: ((clientX - rect.left) / rect.width) * 100, y: ((clientY - rect.top) / rect.height) * 100 };
+  };
+
+  // 손가락(포인터) 아래에 있는 것: 다른 선수 자리·벤치를 먼저, 없으면 빈 잔디
+  const collision: CollisionDetection = (args) => {
+    const hits = pointerWithin(args);
+    const ownSlot = `slot:${slotOf(String(args.active.id))}`;
+    const target = hits.find((h) => h.id !== 'pitch' && h.id !== ownSlot);
+    return target ? [target] : hits.filter((h) => h.id === 'pitch');
+  };
+
+  // 드래그 중 손가락/마우스의 마지막 화면 위치 (자동 스크롤돼도 정확하게)
+  const lastPointer = useRef<{ x: number; y: number } | null>(null);
+  const trackPointer = (e: PointerEvent | TouchEvent) => {
+    const t = 'touches' in e ? e.touches[0] : e;
+    if (t) lastPointer.current = { x: t.clientX, y: t.clientY };
+  };
+  const startTracking = () => {
+    lastPointer.current = null;
+    window.addEventListener('pointermove', trackPointer);
+    window.addEventListener('touchmove', trackPointer, { passive: true });
+  };
+  const stopTracking = () => {
+    window.removeEventListener('pointermove', trackPointer);
+    window.removeEventListener('touchmove', trackPointer);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    stopTracking();
+    const { active, over } = event;
     if (!over) return;
     const playerId = String(active.id);
     const overId = String(over.id);
-    drop(playerId, overId === 'bench' ? { kind: 'bench' } : { kind: 'slot', slotId: overId.replace('slot:', '') });
+    if (overId === 'bench') return drop(playerId, { kind: 'bench' });
+    if (overId !== 'pitch') return drop(playerId, { kind: 'slot', slotId: overId.replace('slot:', '') });
+
+    // 빈 잔디: 마지막 손가락 위치 (없으면 처음 누른 곳 + 끌고 간 거리)
+    let pointer = lastPointer.current;
+    if (!pointer) {
+      const start = event.activatorEvent as MouseEvent | TouchEvent;
+      const origin = 'touches' in start ? (start.touches[0] ?? start.changedTouches[0]) : start;
+      if (origin) pointer = { x: origin.clientX + event.delta.x, y: origin.clientY + event.delta.y };
+    }
+    const point = pointer && toPitchPoint(pointer.x, pointer.y);
+    if (point) drop(playerId, { kind: 'point', point });
   };
 
   // 탭 이동: 선수를 먼저 누르고, 이동할 곳을 누른다
@@ -66,14 +119,25 @@ export function LineupBoard({ players, lineup, color, onDrop, unavailable = [], 
     else setSelected(id);
   };
   const tapSlot = (slotId: string) => selected && drop(selected, { kind: 'slot', slotId });
+  const tapPitch = (e: React.MouseEvent) => {
+    if (!selected) return;
+    const point = toPitchPoint(e.clientX, e.clientY);
+    if (point) drop(selected, { kind: 'point', point });
+  };
   const tapBench = () => selected && drop(selected, { kind: 'bench' });
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} collisionDetection={collision} onDragStart={startTracking} onDragCancel={stopTracking} onDragEnd={handleDragEnd}>
+      <div className="board-head">
+        <span className="badge" data-testid="shape">현재 모양 <b>{shapeName(lineup)}</b></span>
+        {onResetPositions && lineup.positions && Object.keys(lineup.positions).length > 0 && (
+          <button className="btn btn--text btn--inline" onClick={onResetPositions}>↺ 기본 위치로</button>
+        )}
+      </div>
       <div className="board">
-        <div className="pitch" style={{ '--team': color } as React.CSSProperties}>
+        <PitchDrop color={color} pitchRef={pitchRef} onTap={tapPitch} active={Boolean(selected)}>
           <PitchLines />
-          {formation.slots.map((slot) => {
+          {slots.map((slot) => {
             const pid = lineup.slots[slot.id];
             const player = pid ? byId.get(pid) : undefined;
             return (
@@ -93,7 +157,7 @@ export function LineupBoard({ players, lineup, color, onDrop, unavailable = [], 
               </SlotDrop>
             );
           })}
-        </div>
+        </PitchDrop>
 
         <BenchDrop onTap={tapBench} title={benchTitle} active={Boolean(selected)}>
           {bench.length === 0 && <p className="muted small">벤치에 선수가 없어요</p>}
@@ -110,9 +174,34 @@ export function LineupBoard({ players, lineup, color, onDrop, unavailable = [], 
         </BenchDrop>
       </div>
       <p className="hint">
-        💡 선수를 끌어서 옮기거나, 선수를 누른 뒤 원하는 자리를 눌러도 돼요. 노란 테두리는 원래 포지션이 아닌 자리예요.
+        💡 선수를 <b>빈 잔디</b>에 놓으면 그 위치로 자유롭게 옮겨지고, <b>다른 선수</b> 위에 놓으면 자리를 바꿔요.
+        선수를 누른 뒤 원하는 곳을 눌러도 돼요. 서 있는 위치에 따라 수비·미드·공격 역할이 정해지고, 주황 테두리는 원래 포지션과 다른 역할이에요.
       </p>
     </DndContext>
+  );
+}
+
+function PitchDrop(props: {
+  color: string;
+  active: boolean;
+  pitchRef: React.MutableRefObject<HTMLDivElement | null>;
+  onTap(e: React.MouseEvent): void;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: 'pitch' });
+  return (
+    <div
+      ref={(el) => {
+        setNodeRef(el);
+        props.pitchRef.current = el;
+      }}
+      className={`pitch ${isOver ? 'pitch--over' : ''} ${props.active ? 'pitch--target' : ''}`}
+      style={{ '--team': props.color } as React.CSSProperties}
+      onClick={props.onTap}
+      data-testid="pitch"
+    >
+      {props.children}
+    </div>
   );
 }
 
@@ -123,7 +212,10 @@ function SlotDrop(props: { id: string; x: number; y: number; onTap(): void; chil
       ref={setNodeRef}
       className={`slot ${isOver ? 'slot--over' : ''}`}
       style={{ left: `${props.x}%`, top: `${props.y}%` }}
-      onClick={props.onTap}
+      onClick={(e) => {
+        e.stopPropagation();
+        props.onTap();
+      }}
       data-testid={props.id}
     >
       {props.children}

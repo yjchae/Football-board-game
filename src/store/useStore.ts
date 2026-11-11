@@ -1,13 +1,20 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { autoLineup, changeFormation, emptyLineup } from '../domain/formations';
-import type { AiSettings, Lineup, Player, Team } from '../domain/types';
+import { lineupFromPhoto } from '../domain/positions';
+import type { AiSettings, Lineup, Player, Point, Team } from '../domain/types';
 import { uid } from '../utils/id';
 import { createDemoTeams } from './demoTeams';
 
 // ─────────────────────────────────────────────
 // 앱 전역 상태 (팀/선수/AI 설정) — 브라우저 localStorage에 자동 저장
 // ─────────────────────────────────────────────
+
+/** 선수를 여러 명 추가할 때 선발을 어떻게 세울지 */
+export type Placement =
+  | { kind: 'none' } // 지금 라인업 그대로
+  | { kind: 'auto' } // 능력치·역할로 자동 배치
+  | { kind: 'photo'; points: (Point | undefined)[] }; // 사진 속 카드 배치 그대로 (players와 같은 순서)
 
 export const DEFAULT_SETTINGS: AiSettings = {
   engine: 'local',
@@ -30,8 +37,8 @@ interface State {
   removeTeam(teamId: string): void;
 
   addPlayer(teamId: string, player: Omit<Player, 'id'>): void;
-  /** 여러 명 한 번에 추가 (arrange: 추가 후 자동 포지션 배치) */
-  addPlayers(teamId: string, players: Omit<Player, 'id'>[], arrange: boolean): void;
+  /** 여러 명 한 번에 추가 + 선발 배치 방법 */
+  addPlayers(teamId: string, players: Omit<Player, 'id'>[], placement: Placement): void;
   updatePlayer(teamId: string, player: Player): void;
   removePlayer(teamId: string, playerId: string): void;
 
@@ -68,11 +75,18 @@ export const useStore = create<State>()(
           teams: mapTeam(s.teams, teamId, (t) => ({ ...t, players: [...t.players, { ...player, id: uid('p-') }] })),
         }));
       },
-      addPlayers(teamId, players, arrange) {
+      addPlayers(teamId, players, placement) {
         set((s) => ({
           teams: mapTeam(s.teams, teamId, (t) => {
-            const all = [...t.players, ...players.map((p) => ({ ...p, id: uid('p-') }))];
-            return { ...t, players: all, lineup: arrange ? autoLineup(all, t.lineup.formationId) : t.lineup };
+            const added = players.map((p) => ({ ...p, id: uid('p-') }));
+            const all = [...t.players, ...added];
+            const lineup =
+              placement.kind === 'photo'
+                ? lineupFromPhoto(added, placement.points, t.lineup.formationId)
+                : placement.kind === 'auto'
+                  ? autoLineup(all, t.lineup.formationId)
+                  : t.lineup;
+            return { ...t, players: all, lineup };
           }),
         }));
       },

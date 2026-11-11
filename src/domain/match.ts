@@ -1,4 +1,5 @@
-import { getFormation, onPitchIds } from './formations';
+import { onPitchIds } from './formations';
+import { resolveSlots, shapeName } from './positions';
 import type {
   EventType,
   Lineup,
@@ -103,10 +104,9 @@ export function benchPlayers(side: MatchSide): Player[] {
 }
 
 export function buildSideContext(side: Side, ms: MatchSide): SideContext {
-  const formation = getFormation(ms.lineup.formationId);
   const byId = new Map(ms.team.players.map((p) => [p.id, p]));
   const onPitch: FieldPlayer[] = [];
-  for (const slot of formation.slots) {
+  for (const slot of resolveSlots(ms.lineup)) {
     const pid = ms.lineup.slots[slot.id];
     const player = pid ? byId.get(pid) : undefined;
     if (player) onPitch.push({ player, slotRole: slot.role, slotLabel: slot.label });
@@ -114,7 +114,7 @@ export function buildSideContext(side: Side, ms: MatchSide): SideContext {
   return {
     side,
     teamName: ms.team.name,
-    formation: formation.name,
+    formation: shapeName(ms.lineup),
     onPitch,
     bench: benchPlayers(ms),
   };

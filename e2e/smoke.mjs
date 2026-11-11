@@ -56,7 +56,8 @@ async function run(name, contextOptions) {
     await chip.tap();
     await target.tap();
   } else {
-    // 데스크톱: 실제 마우스 드래그앤드롭
+    // 데스크톱: 실제 마우스 드래그앤드롭 (대상이 화면 안에 보이도록 먼저 스크롤)
+    await target.scrollIntoViewIfNeeded();
     const a = await chip.boundingBox();
     const b = await target.boundingBox();
     await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
