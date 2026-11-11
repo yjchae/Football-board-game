@@ -67,3 +67,22 @@ export const CARD_SCAN_PROMPT = `이 사진은 실물 축구 선수 카드야. �
   "overall": 종합 능력치 숫자,
   "stats": { "pace": 0, "shooting": 0, "passing": 0, "dribbling": 0, "defending": 0, "physical": 0 }
 }`;
+
+export const TEAM_SCAN_PROMPT = `이 사진에는 실물 축구 선수 카드가 여러 장 놓여 있어. 사진 속 카드를 빠짐없이 모두 찾아서 JSON으로만 답해.
+- 카드가 아닌 물건은 무시해. 같은 카드를 두 번 적지 마.
+- 읽을 수 없는 능력치는 카드 분위기와 포지션에 맞게 40~90 사이로 합리적으로 추정해.
+- box는 사진 안에서 그 카드가 차지하는 영역이야. [ymin, xmin, ymax, xmax] 형식으로, 사진 전체를 0~1000으로 본 정수 좌표를 써.
+
+{
+  "cards": [
+    {
+      "name": "선수 이름 (카드 표기 그대로)",
+      "number": 등번호 숫자 (없으면 0),
+      "position": "카드 포지션 표기 (예: ST, CAM, CB, GK)",
+      "role": "GK | DF | MF | FW 중 하나",
+      "overall": 종합 능력치 숫자,
+      "stats": { "pace": 0, "shooting": 0, "passing": 0, "dribbling": 0, "defending": 0, "physical": 0 },
+      "box": [ymin, xmin, ymax, xmax]
+    }
+  ]
+}`;

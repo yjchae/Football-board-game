@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { extractJson, guessRole, sanitizeCard, sanitizeSegment } from '../ai/parse';
+import { extractJson, guessRole, sanitizeCard, sanitizeSegment, sanitizeTeamScan } from '../ai/parse';
+import { boxToRect } from '../utils/image';
 import { createDemoTeams } from '../store/demoTeams';
 import { autoLineup, changeFormation, FORMATIONS, onPitchIds } from './formations';
 import { createLocalEngine, seededRng } from './localEngine';
@@ -180,5 +181,35 @@ describe('AI 응답 검증', () => {
     expect(guessRole('RB')).toBe('DF');
     expect(guessRole('CAM')).toBe('MF');
     expect(guessRole('LW')).toBe('FW');
+  });
+});
+
+describe('팀 단체 사진 스캔', () => {
+  it('카드 목록을 정리하고 잘못된 영역은 버린다', () => {
+    const cards = sanitizeTeamScan({
+      cards: [
+        { name: 'A', position: 'GK', overall: 80, box: [100, 100, 400, 300] },
+        { name: 'B', position: 'ST', overall: 75, box: [500, 500, 490, 600] }, // 뒤집힌 영역
+        { name: 'C', position: 'CB', overall: 70, box: 'nope' },
+        '카드 아님',
+      ],
+    });
+    expect(cards.map((c) => c.name)).toEqual(['A', 'B', 'C']);
+    expect(cards[0].box).toEqual([100, 100, 400, 300]);
+    expect(cards[1].box).toBeUndefined();
+    expect(cards[2].role).toBe('DF');
+  });
+
+  it('배열만 와도 받아들이고, 최대 30장까지만', () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({ name: `P${i}`, position: 'CM' }));
+    expect(sanitizeTeamScan(many)).toHaveLength(30);
+    expect(() => sanitizeTeamScan({ foo: 1 })).toThrow();
+  });
+
+  it('0~1000 좌표를 픽셀 영역으로 바꾸고 사진 밖으로 넘치지 않는다', () => {
+    expect(boxToRect([0, 0, 500, 500], 2000, 1000, 0)).toEqual({ x: 0, y: 0, w: 1000, h: 500 });
+    const r = boxToRect([0, 900, 1000, 1000], 1000, 1000);
+    expect(r.x + r.w).toBeLessThanOrEqual(1000);
+    expect(r.y).toBe(0);
   });
 });

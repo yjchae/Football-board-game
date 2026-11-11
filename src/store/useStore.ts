@@ -30,6 +30,8 @@ interface State {
   removeTeam(teamId: string): void;
 
   addPlayer(teamId: string, player: Omit<Player, 'id'>): void;
+  /** 여러 명 한 번에 추가 (arrange: 추가 후 자동 포지션 배치) */
+  addPlayers(teamId: string, players: Omit<Player, 'id'>[], arrange: boolean): void;
   updatePlayer(teamId: string, player: Player): void;
   removePlayer(teamId: string, playerId: string): void;
 
@@ -64,6 +66,14 @@ export const useStore = create<State>()(
       addPlayer(teamId, player) {
         set((s) => ({
           teams: mapTeam(s.teams, teamId, (t) => ({ ...t, players: [...t.players, { ...player, id: uid('p-') }] })),
+        }));
+      },
+      addPlayers(teamId, players, arrange) {
+        set((s) => ({
+          teams: mapTeam(s.teams, teamId, (t) => {
+            const all = [...t.players, ...players.map((p) => ({ ...p, id: uid('p-') }))];
+            return { ...t, players: all, lineup: arrange ? autoLineup(all, t.lineup.formationId) : t.lineup };
+          }),
         }));
       },
       updatePlayer(teamId, player) {

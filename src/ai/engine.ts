@@ -1,8 +1,8 @@
 import { createLocalEngine } from '../domain/localEngine';
 import type { MatchEngine, SegmentContext } from '../domain/match';
 import type { AiSettings } from '../domain/types';
-import { extractJson, sanitizeCard, sanitizeSegment, type ScannedCard } from './parse';
-import { buildSegmentPrompt, CARD_SCAN_PROMPT, MATCH_SYSTEM_PROMPT } from './prompts';
+import { extractJson, sanitizeCard, sanitizeSegment, sanitizeTeamScan, type ScannedCard, type ScannedTeamCard } from './parse';
+import { buildSegmentPrompt, CARD_SCAN_PROMPT, MATCH_SYSTEM_PROMPT, TEAM_SCAN_PROMPT } from './prompts';
 import { claudeProvider, geminiProvider, type ImageInput, type TextProvider } from './providers';
 
 // ─────────────────────────────────────────────
@@ -66,6 +66,18 @@ export async function scanCard(settings: AiSettings, image: ImageInput): Promise
   try {
     const text = await provider.generate('너는 축구 카드 판독기야. JSON만 출력해.', CARD_SCAN_PROMPT, image);
     return sanitizeCard(extractJson(text));
+  } catch (err) {
+    throw new Error(friendlyError(err));
+  }
+}
+
+/** 여러 장의 카드가 찍힌 단체 사진 → 선수 목록 */
+export async function scanTeamPhoto(settings: AiSettings, image: ImageInput): Promise<ScannedTeamCard[]> {
+  const provider = providerFor(settings);
+  if (!provider) throw new Error('카드 인식을 하려면 설정에서 AI 키를 연결해 주세요.');
+  try {
+    const text = await provider.generate('너는 축구 카드 판독기야. JSON만 출력해.', TEAM_SCAN_PROMPT, image);
+    return sanitizeTeamScan(extractJson(text));
   } catch (err) {
     throw new Error(friendlyError(err));
   }

@@ -132,3 +132,34 @@ export function sanitizeCard(raw: unknown): ScannedCard {
     },
   };
 }
+
+// ─────────────── 단체 사진 스캔 결과 ───────────────
+
+/** 사진 속 카드 위치 (0~1000 비율 좌표) */
+export type Box = [ymin: number, xmin: number, ymax: number, xmax: number];
+
+export interface ScannedTeamCard extends ScannedCard {
+  box?: Box;
+}
+
+export const MAX_CARDS_PER_PHOTO = 30;
+
+function sanitizeBox(raw: unknown): Box | undefined {
+  if (!Array.isArray(raw) || raw.length !== 4) return undefined;
+  const n = raw.map((v) => Math.round(Math.min(1000, Math.max(0, num(v, NaN)))));
+  if (n.some((v) => Number.isNaN(v))) return undefined;
+  const [ymin, xmin, ymax, xmax] = n;
+  // 너무 작거나 뒤집힌 영역은 버린다
+  if (ymax - ymin < 20 || xmax - xmin < 20) return undefined;
+  return [ymin, xmin, ymax, xmax];
+}
+
+export function sanitizeTeamScan(raw: unknown): ScannedTeamCard[] {
+  // {"cards": [...]} 또는 배열 그대로 둘 다 허용
+  const list = Array.isArray(raw) ? raw : isObj(raw) && Array.isArray(raw.cards) ? raw.cards : null;
+  if (!list) throw new Error('사진에서 카드 목록을 읽지 못했어요.');
+  return list
+    .slice(0, MAX_CARDS_PER_PHOTO)
+    .filter(isObj)
+    .map((item) => ({ ...sanitizeCard(item), box: sanitizeBox(item.box) }));
+}

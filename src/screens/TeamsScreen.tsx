@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { LineupBoard } from '../components/LineupBoard';
 import { PlayerCard } from '../components/PlayerCard';
 import { PlayerEditor } from '../components/PlayerEditor';
+import { TeamScanner } from '../components/TeamScanner';
 import { FORMATIONS, onPitchIds } from '../domain/formations';
 import { applyDrop } from '../domain/lineupOps';
 import type { Player, Team } from '../domain/types';
@@ -113,6 +114,7 @@ function TeamDetail({ team }: { team: Team }) {
   const { addPlayer, updatePlayer, removePlayer, removeTeam, updateTeam, setLineup, setFormation, autoArrange } = useStore();
   const [tab, setTab] = useState<'roster' | 'lineup'>('roster');
   const [editing, setEditing] = useState<Player | 'new' | null>(null);
+  const [bulkScan, setBulkScan] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const starters = onPitchIds(team.lineup).length;
 
@@ -140,7 +142,11 @@ function TeamDetail({ team }: { team: Team }) {
         <div className="roster">
           <button className="add-card" onClick={() => setEditing('new')}>
             <span>＋</span>
-            카드 찍어서<br />선수 등록
+            카드 1장 찍어서<br />선수 등록
+          </button>
+          <button className="add-card add-card--team" onClick={() => setBulkScan(true)}>
+            <span>🃏🃏🃏</span>
+            여러 장 한 번에 찍어서<br />팀 등록
           </button>
           {team.players.map((p) => (
             <PlayerCard key={p.id} player={p} onClick={() => setEditing(p)} />
@@ -171,6 +177,8 @@ function TeamDetail({ team }: { team: Team }) {
           />
         </div>
       )}
+
+      {bulkScan && <TeamScanner team={team} onClose={() => setBulkScan(false)} />}
 
       {editing && (
         <PlayerEditor
