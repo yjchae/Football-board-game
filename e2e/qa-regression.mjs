@@ -50,6 +50,38 @@ const FAST = () => localStorage.setItem('card-football-v1', JSON.stringify({ sta
   await p.context().close();
 }
 
+// ─────────────── R2-1: 고칠 수 없는 AI 오류는 한 번만, 잠깐 초과는 재시도 ───────────────
+async function firstHalfAiCalls(status, message) {
+  const p = await (await b.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  await p.addInitScript(() =>
+    localStorage.setItem('card-football-v1', JSON.stringify({ state: { teams: [], settings: { engine: 'gemini', geminiKey: 'k', playbackMs: 40 } }, version: 0 })),
+  );
+  let calls = 0;
+  await p.route('**/generativelanguage.googleapis.com/**', (route) => {
+    calls++;
+    route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ error: { code: status, status: 'RESOURCE_EXHAUSTED', message } }) });
+  });
+  await p.goto(URL);
+  await p.getByText('연습용 팀 2개 불러오기').click();
+  await p.getByRole('button', { name: /경기$/ }).click();
+  await p.getByRole('button', { name: '⚽ 경기 시작' }).click();
+  await p.getByRole('button', { name: '🎉 킥오프!' }).click();
+  const resume = p.getByRole('button', { name: '▶ 경기 재개' });
+  for (let i = 0; i < 600 && !(await p.getByTestId('summary-1').isVisible()); i++) {
+    if (await resume.isVisible()) await resume.click();
+    await p.waitForTimeout(100);
+  }
+  const done = await p.getByTestId('summary-1').isVisible();
+  await p.context().close();
+  return { calls, done };
+}
+{
+  const permanent = await firstHalfAiCalls(429, 'Quota exceeded for metric: free_tier_requests, limit: 0, model: x');
+  check(permanent.done && permanent.calls === 1, `R2-1 한도 0 오류: 전반 AI 요청 ${permanent.calls}회(1회여야 함), 경기 계속`);
+  const transient = await firstHalfAiCalls(429, 'Resource has been exhausted. Please retry in 20s.');
+  check(transient.done && transient.calls === 3, `R2-1 잠깐 사용량 초과: 구간마다 재시도 ${transient.calls}회(3회), 경기 계속`);
+}
+
 const painter = await b.newPage({ viewport: { width: 900, height: 1200 } });
 await painter.setContent('<canvas id=c width=900 height=1200></canvas><script>const x=c.getContext("2d");for(let i=0;i<4000;i++){x.fillStyle=`hsl(${Math.random()*360},80%,50%)`;x.fillRect(Math.random()*900,Math.random()*1200,30,30)}</script>');
 const img = await painter.screenshot({ type: 'jpeg', quality: 95 });

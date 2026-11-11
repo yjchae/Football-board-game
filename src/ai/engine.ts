@@ -37,6 +37,12 @@ export function friendlyError(err: unknown): string {
   return msg.slice(0, 120);
 }
 
+/** 다시 시도해도 안 되는 오류인지 (잠깐의 사용량 초과·네트워크 오류는 다음 구간에 다시 시도) */
+export function isPermanentError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /API key not valid|invalid x-api-key|authentication|401|403|PERMISSION_DENIED|limit:\s*0\b|not found|404|is not supported/i.test(msg);
+}
+
 function toAiError(err: unknown): AiError {
   const raw = err instanceof Error ? err.message : String(err);
   return new AiError(friendlyError(err), raw.slice(0, 600));
@@ -64,14 +70,20 @@ export function createEngine(settings: AiSettings, onFallback?: (reason: string)
   const provider = providerFor(settings);
   if (!provider) return local;
 
+  // 키 오류·한도 0·없는 모델처럼 다시 해도 안 되는 오류가 나면
+  // 이번 경기는 AI를 더 부르지 않고 오프라인 엔진으로 계속한다 (요청 낭비 방지)
+  let giveUp = false;
+
   return {
     label: engineLabel(settings),
     async simulateSegment(ctx: SegmentContext) {
+      if (giveUp) return local.simulateSegment(ctx);
       try {
         const text = await provider.generate(MATCH_SYSTEM_PROMPT, buildSegmentPrompt(ctx));
         return sanitizeSegment(extractJson(text), ctx);
       } catch (err) {
-        onFallback?.(friendlyError(err));
+        giveUp = isPermanentError(err);
+        onFallback?.(friendlyError(err) + (giveUp ? ' 이번 경기는 오프라인 엔진으로 계속해요.' : ''));
         return local.simulateSegment(ctx);
       }
     },

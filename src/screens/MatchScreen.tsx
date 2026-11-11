@@ -100,7 +100,7 @@ function LiveMatch({ home, away, onExit }: { home: Team; away: Team; onExit(): v
   const settings = useStore((s) => s.settings);
   const [fallbackMsg, setFallbackMsg] = useState<string | null>(null);
   const engine = useMemo(
-    () => createEngine(settings, (reason) => setFallbackMsg(`AI 연결 문제로 이번 구간은 오프라인 엔진이 진행했어요. (${reason})`)),
+    () => createEngine(settings, (reason) => setFallbackMsg(`AI 연결 문제로 오프라인 엔진이 대신 진행했어요. ${reason}`)),
     // 경기 도중 설정이 바뀌어도 엔진은 유지
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],

@@ -244,7 +244,12 @@ export function TacticsPanel({ sides, onUpdate, beforeKickoff = false }: Tactics
             <button
               key={f.id}
               className={ms.lineup.formationId === f.id ? 'on' : ''}
-              onClick={() => onUpdate(tab, { ...ms, lineup: changeFormation(ms.lineup, ms.team.players, f.id) }, `${ms.team.name} 포메이션 변경 → ${f.name}`)}
+              onClick={() => {
+                // 같은 포메이션을 다시 누르면 기본 위치로만 되돌리고 중계 기록은 남기지 않는다
+                const changed = ms.lineup.formationId !== f.id;
+                const log = changed && !beforeKickoff ? `${ms.team.name} 포메이션 변경 → ${f.name}` : undefined;
+                onUpdate(tab, { ...ms, lineup: changeFormation(ms.lineup, ms.team.players, f.id) }, log);
+              }}
             >
               {f.name}
             </button>

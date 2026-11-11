@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { extractJson, guessRole, sanitizeCard, sanitizeSegment, sanitizeTeamScan } from '../ai/parse';
 import { boxToRect } from '../utils/image';
-import { friendlyError } from '../ai/engine';
+import { friendlyError, isPermanentError } from '../ai/engine';
 import { createDemoTeams } from '../store/demoTeams';
 import { autoLineup, changeFormation, FORMATIONS, onPitchIds } from './formations';
 import { createLocalEngine, seededRng } from './localEngine';
@@ -223,5 +223,15 @@ describe('AI 오류 안내', () => {
     expect(busy).toContain('잠시 후');
     expect(friendlyError(new Error('API key not valid. Please pass a valid API key.'))).toContain('키');
     expect(friendlyError(new Error('models/gemini-old is not found for API version v1beta'))).toContain('모델');
+  });
+});
+
+describe('AI 오류 재시도 판단', () => {
+  it('키 오류·한도 0·없는 모델은 포기, 잠깐 초과·네트워크는 다음에 재시도', () => {
+    expect(isPermanentError(new Error('API key not valid'))).toBe(true);
+    expect(isPermanentError(new Error('Quota exceeded ... limit: 0, model: x'))).toBe(true);
+    expect(isPermanentError(new Error('models/x is not found'))).toBe(true);
+    expect(isPermanentError(new Error('429 Resource has been exhausted, retry in 30s'))).toBe(false);
+    expect(isPermanentError(new Error('Connection error.'))).toBe(false);
   });
 });
