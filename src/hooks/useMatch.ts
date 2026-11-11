@@ -9,6 +9,7 @@ import {
   SEGMENTS,
   type MatchEngine,
   type MatchSide,
+  type SegmentContext,
   type SegmentResult,
 } from '../domain/match';
 import type { HalfSummary, MatchEvent, Side, Team } from '../domain/types';
@@ -213,9 +214,51 @@ export function reducer(state: MatchState, action: Action): MatchState {
   }
 }
 
+// ─────────────── 다음 구간 미리 받아두기 ───────────────
+// AI 응답은 몇 초씩 걸린다. 구간이 끝난 뒤에야 다음 구간을 요청하면
+// 매 15분마다 "다음 장면을 만들고 있어요…"에서 경기가 멈춘 것처럼 보인다.
+// 그래서 현재 구간을 재생하는 동안 다음 구간을 미리 요청해 둔다.
+
+/** 경기 상태 → 엔진에 넘길 구간 상황 */
+export function buildSegmentContext(state: MatchState): SegmentContext {
+  return {
+    segment: SEGMENTS[state.segIndex],
+    isLastOfHalf: isLastSegmentOfHalf(state.segIndex),
+    home: buildSideContext('home', state.home),
+    away: buildSideContext('away', state.away),
+    score: scoreOf(state.events),
+    history: state.events.filter((e) => e.type !== 'info'),
+  };
+}
+
+/** 미리 받은 결과를 그대로 써도 되는지 비교하는 열쇠 (이벤트 id처럼 매번 달라지는 값은 뺀다) */
+export function contextKey(ctx: SegmentContext): string {
+  return JSON.stringify({
+    segment: ctx.segment,
+    home: ctx.home,
+    away: ctx.away,
+    score: ctx.score,
+    history: ctx.history.map((e) => [e.minute, e.type, e.side, e.playerId, e.assistId, e.text]),
+  });
+}
+
+/** 지금 구간을 끝까지 재생했을 때(아무도 끼어들지 않으면)의 상태 */
+export function stateAfterSegment(state: MatchState): MatchState {
+  let s = state;
+  while (s.queue.length) s = reducer(s, { type: 'REVEAL' });
+  return reducer(s, { type: 'SEGMENT_END' });
+}
+
+interface Prefetch {
+  segIndex: number;
+  key: string;
+  promise: Promise<SegmentResult>;
+}
+
 export function useMatch(teams: { home: Team; away: Team }, engine: MatchEngine, playbackMs: number) {
   const [state, dispatch] = useReducer(reducer, teams, init);
   const requested = useRef<number | null>(null);
+  const prefetch = useRef<Prefetch | null>(null);
 
   // 1) 구간 이벤트 요청 (React StrictMode 중복 실행 방지)
   useEffect(() => {
@@ -223,18 +266,33 @@ export function useMatch(teams: { home: Team; away: Team }, engine: MatchEngine,
     if (requested.current === state.segIndex) return;
     requested.current = state.segIndex;
 
-    const segment = SEGMENTS[state.segIndex];
-    const ctx = {
-      segment,
-      isLastOfHalf: isLastSegmentOfHalf(state.segIndex),
-      home: buildSideContext('home', state.home),
-      away: buildSideContext('away', state.away),
-      score: scoreOf(state.events),
-      history: state.events.filter((e) => e.type !== 'info'),
-    };
+    const ctx = buildSegmentContext(state);
+    // 미리 받아둔 결과가 있고, 그 사이 교체 등으로 상황이 바뀌지 않았다면 그대로 쓴다
+    const ready = prefetch.current;
+    prefetch.current = null;
+    const promise =
+      ready && ready.segIndex === state.segIndex && ready.key === contextKey(ctx) ? ready.promise : engine.simulateSegment(ctx);
+
     dispatch({ type: 'FETCH_START' });
-    engine.simulateSegment(ctx).then((result) => dispatch({ type: 'FETCH_DONE', result }));
+    promise.then((result) => dispatch({ type: 'FETCH_DONE', result }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase, state.segmentLoaded, state.fetching, state.segIndex, state.home, state.away, state.events, engine]);
+
+  // 1-2) 현재 구간을 받자마자 다음 구간을 미리 요청
+  useEffect(() => {
+    if (state.phase !== 'playing' || !state.segmentLoaded) return;
+    const nextIndex = state.segIndex + 1;
+    if (prefetch.current?.segIndex === nextIndex || requested.current === nextIndex) return;
+
+    const future = stateAfterSegment(state);
+    // 하프타임/경기 종료면 다음 요청은 사용자가 "후반 시작"을 누른 뒤에 한다
+    if (future.phase !== 'playing' && future.phase !== 'timeout') return;
+    if (future.segIndex !== nextIndex || !SEGMENTS[nextIndex]) return;
+
+    const ctx = buildSegmentContext(future);
+    prefetch.current = { segIndex: nextIndex, key: contextKey(ctx), promise: engine.simulateSegment(ctx) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase, state.segmentLoaded, state.segIndex, engine]);
 
   // 2) 이벤트를 하나씩 재생
   useEffect(() => {

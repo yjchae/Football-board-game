@@ -32,6 +32,10 @@ export function friendlyError(err: unknown): string {
   if (/429|RESOURCE_EXHAUSTED|quota|rate/i.test(msg)) {
     return '짧은 시간에 너무 많이 요청했거나 오늘 사용량을 다 썼어요. 잠시 후 다시 하거나 다른 모델을 골라 주세요.';
   }
+  if (/\b50[03]\b|UNAVAILABLE|overloaded|INTERNAL|DEADLINE|timed? ?out|aborted/i.test(msg)) {
+    return 'AI 서버가 바쁘거나 응답이 늦었어요. 잠시 후 자동으로 다시 시도해요.';
+  }
+  if (/truncated|JSON|Unexpected end|Unterminated/i.test(msg)) return 'AI 응답이 중간에 끊겼어요.';
   if (/not found|404|is not supported/i.test(msg)) return '모델 이름을 찾을 수 없어요. 설정에서 "사용 가능한 모델 불러오기"로 골라 주세요.';
   if (/connection|network|fetch/i.test(msg)) return '인터넷 연결 또는 AI 서버 접속에 실패했어요.';
   return msg.slice(0, 120);
@@ -41,6 +45,37 @@ export function friendlyError(err: unknown): string {
 export function isPermanentError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /API key not valid|invalid x-api-key|authentication|401|403|PERMISSION_DENIED|limit:\s*0\b|not found|404|is not supported/i.test(msg);
+}
+
+/**
+ * 몇 초 뒤 바로 다시 하면 될 가능성이 높은 오류 (서버 혼잡·시간 초과·응답 잘림).
+ * 429 사용량 초과는 몇 초로는 풀리지 않고 할당량만 더 쓰므로 여기서 재시도하지 않는다
+ * (다음 구간에서 다시 시도한다).
+ */
+export function isTransientError(err: unknown): boolean {
+  if (isPermanentError(err)) return false;
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/\b429\b|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(msg)) return false;
+  return /\b50[03]\b|UNAVAILABLE|overloaded|INTERNAL|DEADLINE|timed? ?out|aborted|truncated|JSON|Unexpected end|Unterminated|빈 응답|network|fetch|connection/i.test(
+    msg,
+  );
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * 일시적인 오류면 조금 기다렸다가 다시 시도한다.
+ * 제미나이 무료 등급은 서버 혼잡(503)·순간 한도(429)가 잦아서, 한 번 실패로 바로 포기하면 경기가 자주 끊긴다.
+ */
+export async function withRetry<T>(task: () => Promise<T>, delaysMs: number[] = [1500, 4000]): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await task();
+    } catch (err) {
+      if (attempt >= delaysMs.length || !isTransientError(err)) throw err;
+      await sleep(delaysMs[attempt]);
+    }
+  }
 }
 
 function toAiError(err: unknown): AiError {
@@ -79,8 +114,11 @@ export function createEngine(settings: AiSettings, onFallback?: (reason: string)
     async simulateSegment(ctx: SegmentContext) {
       if (giveUp) return local.simulateSegment(ctx);
       try {
-        const text = await provider.generate(MATCH_SYSTEM_PROMPT, buildSegmentPrompt(ctx));
-        return sanitizeSegment(extractJson(text), ctx);
+        // 응답이 잘려 JSON이 깨진 경우도 재시도 대상이므로 파싱까지 한 번에 감싼다
+        return await withRetry(async () => {
+          const text = await provider.generate(MATCH_SYSTEM_PROMPT, buildSegmentPrompt(ctx));
+          return sanitizeSegment(extractJson(text), ctx);
+        });
       } catch (err) {
         giveUp = isPermanentError(err);
         onFallback?.(friendlyError(err) + (giveUp ? ' 이번 경기는 오프라인 엔진으로 계속해요.' : ''));
@@ -99,8 +137,10 @@ export async function scanCard(settings: AiSettings, image: ImageInput): Promise
   const provider = providerFor(settings);
   if (!provider) throw new Error('카드 인식을 하려면 설정에서 AI 키를 연결해 주세요.');
   try {
-    const text = await provider.generate('너는 축구 카드 판독기야. JSON만 출력해.', CARD_SCAN_PROMPT, image);
-    return sanitizeCard(extractJson(text));
+    return await withRetry(async () => {
+      const text = await provider.generate('너는 축구 카드 판독기야. JSON만 출력해.', CARD_SCAN_PROMPT, image);
+      return sanitizeCard(extractJson(text));
+    });
   } catch (err) {
     throw toAiError(err);
   }
@@ -111,8 +151,10 @@ export async function scanTeamPhoto(settings: AiSettings, image: ImageInput): Pr
   const provider = providerFor(settings);
   if (!provider) throw new Error('카드 인식을 하려면 설정에서 AI 키를 연결해 주세요.');
   try {
-    const text = await provider.generate('너는 축구 카드 판독기야. JSON만 출력해.', TEAM_SCAN_PROMPT, image);
-    return sanitizeTeamScan(extractJson(text));
+    return await withRetry(async () => {
+      const text = await provider.generate('너는 축구 카드 판독기야. JSON만 출력해.', TEAM_SCAN_PROMPT, image);
+      return sanitizeTeamScan(extractJson(text));
+    });
   } catch (err) {
     throw toAiError(err);
   }
