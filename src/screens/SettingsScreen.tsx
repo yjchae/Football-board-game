@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AiError, listGeminiModels, testConnection } from '../ai/engine';
+import { playSfx, releaseSfx, unlockSfx } from '../audio/sfx';
 import { InstallGuide } from '../components/InstallGuide';
 import type { EngineKind } from '../domain/types';
 import { DEFAULT_SETTINGS, useStore } from '../store/useStore';
@@ -30,6 +31,8 @@ export function SettingsScreen() {
   const [testing, setTesting] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
+  // 효과음 테스트로 켠 무음 재생은 화면을 떠날 때 끈다
+  useEffect(() => releaseSfx, []);
 
   const failStatus = (err: unknown) => ({
     ok: false,
@@ -164,7 +167,7 @@ export function SettingsScreen() {
         <div className="toggles">
           <Toggle
             label="🔔 효과음"
-            desc="킥오프·종료 휘슬, 골 함성"
+            desc="휘슬·킥·드리블 소리, 골 함성"
             on={settings.sfx}
             onChange={(sfx) => update({ sfx })}
             testId="toggle-sfx"
@@ -177,7 +180,20 @@ export function SettingsScreen() {
             testId="toggle-voice"
           />
         </div>
-        <p className="muted small">음성 해설은 기기에 설치된 한국어 목소리를 써요. 목소리가 없거나 무음 모드면 들리지 않을 수 있어요.</p>
+        <button
+          className="btn btn--ghost"
+          data-testid="sfx-test"
+          onClick={() => {
+            unlockSfx(); // 누른 순간 오디오를 깨워야 아이패드·아이폰에서도 들린다
+            playSfx('fulltime');
+          }}
+        >
+          🔊 효과음 들어보기
+        </button>
+        <p className="muted small">
+          음성 해설은 기기에 설치된 한국어 목소리를 써요. 효과음이 안 들리면 기기 음량과 아이패드·아이폰의 무음 모드(제어 센터 🔔)를
+          확인해 주세요.
+        </p>
       </section>
 
       <aside className="notice-box">

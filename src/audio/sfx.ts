@@ -117,8 +117,9 @@ export function preloadSfx(): Promise<boolean> {
 // ─────────────── 오디오 깨우기 (특히 아이폰) ───────────────
 //
 //  아이폰 사파리에서 효과음이 안 나는 대표적인 이유 세 가지를 막는다.
-//   1) 무음 스위치: 기본 설정이면 Web Audio가 무음 스위치를 따라 꺼진다
-//      → audioSession을 'playback'(음악·영상과 같은 종류)으로 바꾼다 (지원하는 사파리에서만)
+//   1) 무음 모드: 기본 설정이면 Web Audio가 무음 모드를 따라 꺼진다
+//      → audioSession을 'playback'(음악·영상과 같은 종류)으로 바꾸고 (지원하는 사파리에서만)
+//        들리지 않는 <audio>를 함께 재생한다 (아래 mediaKeeper)
 //   2) 잠금 해제: 터치하는 그 순간에 실제로 소리를 한 번 내야 풀린다
 //      → 들리지 않는 아주 짧은 소리를 재생한다
 //   3) 중단 상태: 음성 해설·전화·앱 전환 뒤 'interrupted'로 멈춘다
@@ -140,6 +141,61 @@ function playSilence(ac: AudioContext) {
   source.start(0);
 }
 
+// ─────────────── 아이패드·아이폰 무음 모드 대응 ───────────────
+//
+//  iOS는 Web Audio를 "효과음"으로 취급해서 무음 모드(제어 센터 🔔, 옆면 스위치)면 꺼 버린다.
+//  들리지 않는 <audio>를 반복 재생해 두면 페이지 전체가 "미디어 재생"으로 바뀌어
+//  동영상처럼 무음 모드에서도 효과음이 나온다. (터치한 순간에만 시작할 수 있다)
+
+let mediaKeeper: HTMLAudioElement | null = null;
+let mediaKeeperWanted = false;
+
+/** 0.5초짜리 완전 무음 WAV 파일을 만들어 주소로 돌려준다 */
+function silentWavUrl(): string {
+  const sampleRate = 8000;
+  const samples = sampleRate / 2;
+  const view = new DataView(new ArrayBuffer(44 + samples));
+  const text = (at: number, str: string) => [...str].forEach((c, i) => view.setUint8(at + i, c.charCodeAt(0)));
+  text(0, 'RIFF');
+  view.setUint32(4, 36 + samples, true);
+  text(8, 'WAVE');
+  text(12, 'fmt ');
+  view.setUint32(16, 16, true); // fmt 크기
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // 모노
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate, true); // 초당 바이트
+  view.setUint16(32, 1, true); // 블록 크기
+  view.setUint16(34, 8, true); // 8비트
+  text(36, 'data');
+  view.setUint32(40, samples, true);
+  for (let i = 0; i < samples; i++) view.setUint8(44 + i, 128); // 8비트 무음 = 128
+  return URL.createObjectURL(new Blob([view.buffer], { type: 'audio/wav' }));
+}
+
+/** 무음 <audio> 반복 재생 시작 (반드시 터치 순간에 부른다) */
+function startMediaKeeper() {
+  if (typeof Audio === 'undefined' || typeof URL.createObjectURL !== 'function') return;
+  mediaKeeperWanted = true;
+  try {
+    if (!mediaKeeper) {
+      mediaKeeper = new Audio(silentWavUrl());
+      mediaKeeper.loop = true;
+      mediaKeeper.setAttribute('playsinline', '');
+      mediaKeeper.setAttribute('x-webkit-airplay', 'deny');
+    }
+    if (mediaKeeper.paused) void mediaKeeper.play().catch(() => undefined);
+  } catch {
+    /* 지원하지 않는 환경 */
+  }
+}
+
+/** 경기 화면을 떠날 때 무음 재생을 멈춘다 */
+export function releaseSfx(): void {
+  mediaKeeperWanted = false;
+  mediaKeeper?.pause();
+}
+
 let keepAliveInstalled = false;
 
 /** 경기 중 화면을 터치하거나 앱으로 돌아올 때마다 오디오를 다시 깨운다 */
@@ -147,7 +203,11 @@ function installKeepAlive(ac: AudioContext) {
   if (keepAliveInstalled || typeof document === 'undefined') return;
   keepAliveInstalled = true;
   const revive = () => void wakeUp(ac);
-  for (const type of ['pointerdown', 'touchend', 'keydown']) document.addEventListener(type, revive, { passive: true });
+  const onTouch = () => {
+    revive();
+    if (mediaKeeperWanted) startMediaKeeper(); // 앱 전환 등으로 멈췄으면 터치 순간 다시 시작
+  };
+  for (const type of ['pointerdown', 'touchend', 'keydown']) document.addEventListener(type, onTouch, { passive: true });
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && revive());
 }
 
@@ -162,6 +222,7 @@ export function unlockSfx(): void {
       /* 지원하지 않는 브라우저 */
     }
   }
+  startMediaKeeper();
   const ac = getContext();
   if (!ac) return;
   try {

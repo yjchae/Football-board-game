@@ -103,6 +103,9 @@ async function playFullMatch(page) {
   await page.getByRole('button', { name: /AI 설정/ }).click();
   const speeds = await page.locator('.seg button').allInnerTexts();
   check(speeds.join('|') === '아주 천천히|천천히|조금 천천히|보통|빠르게', `속도 5단계 표시 (${speeds.join(', ')})`);
+  await page.getByTestId('sfx-test').click();
+  await page.waitForTimeout(300);
+  check((await page.evaluate(() => window.__audio.clips['whistle-end'])) === 1, '효과음 들어보기 → 종료 휘슬 재생');
   await page.getByRole('button', { name: '아주 천천히' }).click();
   check(await page.getByRole('button', { name: '아주 천천히' }).evaluate((b) => b.classList.contains('on')), '아주 천천히 선택 유지');
 
