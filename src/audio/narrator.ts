@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────
 // 음성 해설 — 브라우저 내장 음성 합성(Web Speech API) 사용
 //
-//  - 한국어(ko-KR) 목소리가 있으면 그 목소리로, 없으면 기본 목소리로 읽는다
+//  - 한국어(ko-KR) 남자 목소리를 우선 찾고, 없으면 다른 한국어 목소리를 낮은 톤으로 읽는다
 //  - 밀린 문장이 쌓이지 않게 "대기 문장은 최대 1개"만 남긴다
 //  - 골처럼 급한 장면(urgent)은 말하던 것을 끊고 바로 읽는다
 // ─────────────────────────────────────────────
@@ -9,9 +9,25 @@
 const synth = (): SpeechSynthesis | null =>
   typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null;
 
-function koreanVoice(s: SpeechSynthesis): SpeechSynthesisVoice | undefined {
-  const voices = s.getVoices();
-  return voices.find((v) => v.lang === 'ko-KR') ?? voices.find((v) => v.lang.toLowerCase().startsWith('ko'));
+/**
+ * 기기별로 알려진 한국어 남자 목소리 이름 일부.
+ * Web Speech API는 성별 정보를 주지 않아서 이름으로 짐작한다.
+ * (예: 윈도우/엣지 'InJoon', 'Hyunsu' 등 — 기기마다 목록이 다르다)
+ */
+const MALE_HINTS = ['male', 'injoon', 'hyunsu', 'bongjin', 'gookmin', 'minsu', 'jinho', 'junho', '남성', '남자'];
+const FEMALE_HINTS = ['female', '여성', '여자'];
+
+const isMaleVoice = (v: SpeechSynthesisVoice) => {
+  const name = v.name.toLowerCase();
+  return MALE_HINTS.some((h) => name.includes(h)) && !FEMALE_HINTS.some((h) => name.includes(h));
+};
+
+/** 해설에 쓸 목소리와, 그 목소리가 남자 목소리인지 */
+function pickVoice(s: SpeechSynthesis): { voice?: SpeechSynthesisVoice; male: boolean } {
+  const korean = s.getVoices().filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith('ko'));
+  const male = korean.find(isMaleVoice);
+  if (male) return { voice: male, male: true };
+  return { voice: korean.find((v) => v.lang === 'ko-KR') ?? korean[0], male: false };
 }
 
 /**
@@ -53,11 +69,13 @@ export function narrate(text: string, { urgent = false } = {}): void {
 
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'ko-KR';
-  const voice = koreanVoice(s);
+  const { voice, male } = pickVoice(s);
   if (voice) u.voice = voice;
+  // 남자 목소리가 없는 기기는 톤을 크게 낮춰 남자 해설자 느낌을 낸다
+  const basePitch = male ? 0.95 : 0.6;
   // 골 장면은 조금 더 빠르고 높게 → 흥분한 해설 느낌
   u.rate = urgent ? 1.15 : 1.05;
-  u.pitch = urgent ? 1.25 : 1.05;
+  u.pitch = urgent ? basePitch + 0.15 : basePitch;
   speakingUntil = Math.max(speakingUntil, Date.now()) + estimateSpeechMs(text);
   u.onend = u.onerror = () => {
     if (!s.speaking && !s.pending) speakingUntil = 0;
