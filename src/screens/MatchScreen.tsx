@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createEngine, engineLabel } from '../ai/engine';
 import { unlockNarration } from '../audio/narrator';
-import { preloadSfx, unlockSfx } from '../audio/sfx';
+import { preloadSfx, releaseSfx, unlockSfx } from '../audio/sfx';
 import { MatchHistory } from '../components/MatchHistory';
 import {
   EventFeed,
@@ -127,6 +127,7 @@ function LiveMatch({ matchId, home, away, onExit }: { matchId: string; home: Tea
   useEffect(() => {
     if (settings.sfx) void preloadSfx();
   }, [settings.sfx]);
+  useEffect(() => releaseSfx, []);
   useMatchAudio({ events: state.events, homeName: home.name, awayName: away.name, sfx: settings.sfx, voice: settings.voice });
   const soundOn = settings.sfx || settings.voice;
   const toggleSound = () => updateSettings(soundOn ? { sfx: false, voice: false } : { sfx: true, voice: true });

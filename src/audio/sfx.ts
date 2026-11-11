@@ -54,7 +54,7 @@ const RECIPES: Record<SfxKind, Step[]> = {
   goal: [{ clip: 'shot' }, { clip: 'crowd-goal', at: 0.15, volume: 0.9 }],
   foul: [{ clip: 'whistle-foul', volume: 0.8 }],
   shot: [{ clip: 'shot', volume: 0.9 }],
-  save: [{ clip: 'crowd-short', volume: 0.4 }],
+  save: [{ clip: 'crowd-short', volume: 0.75 }],
   dribble: [{ clip: 'dribble', volume: 0.7 }],
   kick: [{ clip: 'kick', volume: 0.9 }],
 };
@@ -92,7 +92,13 @@ const clipUrl = (file: string) => `${import.meta.env.BASE_URL}sfx/${file}.mp3`;
 async function loadClip(ac: AudioContext, file: string): Promise<void> {
   const res = await fetch(clipUrl(file));
   if (!res.ok) throw new Error(`${file}: ${res.status}`);
-  buffers.set(file, await ac.decodeAudioData(await res.arrayBuffer()));
+  const data = await res.arrayBuffer();
+  // 옛 사파리는 decodeAudioData가 Promise를 돌려주지 않아서 콜백 방식으로 감싼다
+  const decoded = await new Promise<AudioBuffer>((resolve, reject) => {
+    const maybe = ac.decodeAudioData(data, resolve, reject);
+    if (maybe && typeof maybe.then === 'function') maybe.then(resolve, reject);
+  });
+  buffers.set(file, decoded);
 }
 
 /**
@@ -108,10 +114,124 @@ export function preloadSfx(): Promise<boolean> {
   return loading;
 }
 
+// ─────────────── 오디오 깨우기 (특히 아이폰) ───────────────
+//
+//  아이폰 사파리에서 효과음이 안 나는 대표적인 이유 세 가지를 막는다.
+//   1) 무음 모드: 기본 설정이면 Web Audio가 무음 모드를 따라 꺼진다
+//      → audioSession을 'playback'(음악·영상과 같은 종류)으로 바꾸고 (지원하는 사파리에서만)
+//        들리지 않는 <audio>를 함께 재생한다 (아래 mediaKeeper)
+//   2) 잠금 해제: 터치하는 그 순간에 실제로 소리를 한 번 내야 풀린다
+//      → 들리지 않는 아주 짧은 소리를 재생한다
+//   3) 중단 상태: 음성 해설·전화·앱 전환 뒤 'interrupted'로 멈춘다
+//      → 화면을 다시 터치하거나 돌아올 때마다, 그리고 재생 직전마다 다시 깨운다
+
+/** 멈춰 있으면 다시 깨운다. 깨우기가 끝나거나 잠깐 기다려도 안 되면 진행 */
+function wakeUp(ac: AudioContext): Promise<void> {
+  if (ac.state === 'running') return Promise.resolve();
+  const resumed = ac.resume().catch(() => undefined);
+  const giveUp = new Promise<void>((done) => setTimeout(done, 300));
+  return Promise.race([resumed, giveUp]);
+}
+
+/** 들리지 않는 1샘플짜리 소리 (iOS 잠금 해제용) */
+function playSilence(ac: AudioContext) {
+  const source = ac.createBufferSource();
+  source.buffer = ac.createBuffer(1, 1, ac.sampleRate);
+  source.connect(ac.destination);
+  source.start(0);
+}
+
+// ─────────────── 아이패드·아이폰 무음 모드 대응 ───────────────
+//
+//  iOS는 Web Audio를 "효과음"으로 취급해서 무음 모드(제어 센터 🔔, 옆면 스위치)면 꺼 버린다.
+//  들리지 않는 <audio>를 반복 재생해 두면 페이지 전체가 "미디어 재생"으로 바뀌어
+//  동영상처럼 무음 모드에서도 효과음이 나온다. (터치한 순간에만 시작할 수 있다)
+
+let mediaKeeper: HTMLAudioElement | null = null;
+let mediaKeeperWanted = false;
+
+/** 0.5초짜리 완전 무음 WAV 파일을 만들어 주소로 돌려준다 */
+function silentWavUrl(): string {
+  const sampleRate = 8000;
+  const samples = sampleRate / 2;
+  const view = new DataView(new ArrayBuffer(44 + samples));
+  const text = (at: number, str: string) => [...str].forEach((c, i) => view.setUint8(at + i, c.charCodeAt(0)));
+  text(0, 'RIFF');
+  view.setUint32(4, 36 + samples, true);
+  text(8, 'WAVE');
+  text(12, 'fmt ');
+  view.setUint32(16, 16, true); // fmt 크기
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // 모노
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate, true); // 초당 바이트
+  view.setUint16(32, 1, true); // 블록 크기
+  view.setUint16(34, 8, true); // 8비트
+  text(36, 'data');
+  view.setUint32(40, samples, true);
+  for (let i = 0; i < samples; i++) view.setUint8(44 + i, 128); // 8비트 무음 = 128
+  return URL.createObjectURL(new Blob([view.buffer], { type: 'audio/wav' }));
+}
+
+/** 무음 <audio> 반복 재생 시작 (반드시 터치 순간에 부른다) */
+function startMediaKeeper() {
+  if (typeof Audio === 'undefined' || typeof URL.createObjectURL !== 'function') return;
+  mediaKeeperWanted = true;
+  try {
+    if (!mediaKeeper) {
+      mediaKeeper = new Audio(silentWavUrl());
+      mediaKeeper.loop = true;
+      mediaKeeper.setAttribute('playsinline', '');
+      mediaKeeper.setAttribute('x-webkit-airplay', 'deny');
+    }
+    if (mediaKeeper.paused) void mediaKeeper.play().catch(() => undefined);
+  } catch {
+    /* 지원하지 않는 환경 */
+  }
+}
+
+/** 경기 화면을 떠날 때 무음 재생을 멈춘다 */
+export function releaseSfx(): void {
+  mediaKeeperWanted = false;
+  mediaKeeper?.pause();
+}
+
+let keepAliveInstalled = false;
+
+/** 경기 중 화면을 터치하거나 앱으로 돌아올 때마다 오디오를 다시 깨운다 */
+function installKeepAlive(ac: AudioContext) {
+  if (keepAliveInstalled || typeof document === 'undefined') return;
+  keepAliveInstalled = true;
+  const revive = () => void wakeUp(ac);
+  const onTouch = () => {
+    revive();
+    if (mediaKeeperWanted) startMediaKeeper(); // 앱 전환 등으로 멈췄으면 터치 순간 다시 시작
+  };
+  for (const type of ['pointerdown', 'touchend', 'keydown']) document.addEventListener(type, onTouch, { passive: true });
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && revive());
+}
+
 /** 사용자 터치 순간에 불러서 오디오를 깨운다 (iOS·크롬 자동재생 정책 대응) */
 export function unlockSfx(): void {
+  const audioSession =
+    typeof navigator === 'undefined' ? undefined : (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+  if (audioSession) {
+    try {
+      audioSession.type = 'playback';
+    } catch {
+      /* 지원하지 않는 브라우저 */
+    }
+  }
+  startMediaKeeper();
   const ac = getContext();
-  if (ac && ac.state === 'suspended') void ac.resume().catch(() => undefined);
+  if (!ac) return;
+  try {
+    void wakeUp(ac);
+    playSilence(ac);
+  } catch {
+    /* 오디오 오류로 경기가 멈추면 안 된다 */
+  }
+  installKeepAlive(ac);
   void preloadSfx();
 }
 
@@ -232,5 +352,8 @@ export function playSfx(kind: SfxKind): void {
   const ac = getContext();
   if (!ac) return;
   // 음원이 아직 로딩 중이면 끝난 뒤에 재생한다 (보통 킥오프 첫 휘슬만 아주 잠깐 늦는다)
-  void preloadSfx().then((ready) => play(ac, kind, ready));
+  void preloadSfx().then(async (ready) => {
+    await wakeUp(ac); // 음성 해설 등으로 멈춰 있었다면 다시 깨운 뒤 재생
+    play(ac, kind, ready);
+  });
 }
