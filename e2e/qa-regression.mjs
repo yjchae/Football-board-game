@@ -60,7 +60,8 @@ async function firstHalfAiCalls(status, message) {
   );
   let calls = 0;
   await p.route('**/generativelanguage.googleapis.com/**', (route) => {
-    calls++;
+    // AI 해설 목소리(TTS) 요청은 경기 엔진 재시도 횟수와 무관하므로 세지 않는다
+    if (!/-tts/.test(route.request().url())) calls++;
     route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ error: { code: status, status: 'RESOURCE_EXHAUSTED', message } }) });
   });
   await p.goto(URL);

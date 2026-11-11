@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AiError, listGeminiModels, testConnection } from '../ai/engine';
+import { configureNarrator, narrate, stopNarration } from '../audio/narrator';
 import { playSfx, releaseSfx, unlockSfx } from '../audio/sfx';
 import { InstallGuide } from '../components/InstallGuide';
 import type { EngineKind } from '../domain/types';
@@ -179,6 +180,17 @@ export function SettingsScreen() {
             onChange={(voice) => update({ voice })}
             testId="toggle-voice"
           />
+          <Toggle
+            label="🧔 AI 남자 목소리"
+            desc={
+              settings.geminiKey
+                ? '제미나이로 남자 해설 목소리를 만들어요 (아이폰에서도 남자 목소리)'
+                : '제미나이 API 키를 넣으면 쓸 수 있어요 (지금은 기기 목소리)'
+            }
+            on={settings.aiVoice}
+            onChange={(aiVoice) => update({ aiVoice })}
+            testId="toggle-ai-voice"
+          />
         </div>
         <button
           className="btn btn--ghost"
@@ -190,8 +202,20 @@ export function SettingsScreen() {
         >
           🔊 효과음 들어보기
         </button>
+        <button
+          className="btn btn--ghost"
+          data-testid="voice-test"
+          onClick={() => {
+            unlockSfx(); // AI 목소리도 효과음과 같은 오디오로 재생된다
+            stopNarration();
+            configureNarrator(settings.aiVoice ? settings.geminiKey : null);
+            narrate('골! 골입니다! 멋진 슈팅으로 골망을 흔듭니다!', { urgent: true });
+          }}
+        >
+          🎙️ 해설 목소리 들어보기
+        </button>
         <p className="muted small">
-          음성 해설은 기기에 설치된 한국어 목소리를 써요. 효과음이 안 들리면 기기 음량과 아이패드·아이폰의 무음 모드(제어 센터 🔔)를
+          AI 남자 목소리는 제미나이 사용량을 조금씩 써요. 연결이 안 되거나 사용량을 다 쓰면 기기 목소리로 대신 읽어요. 효과음이 안 들리면 기기 음량과 아이패드·아이폰의 무음 모드(제어 센터 🔔)를
           확인해 주세요.
         </p>
       </section>

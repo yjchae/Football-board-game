@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS: AiSettings = {
   playbackMs: 1400,
   sfx: true,
   voice: true,
+  aiVoice: true,
 };
 
 /** 경기 기록은 최근 이만큼만 남긴다 */
