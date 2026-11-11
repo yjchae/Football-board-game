@@ -3,6 +3,7 @@ import { MatchScreen } from './screens/MatchScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { TeamsScreen } from './screens/TeamsScreen';
 import { engineLabel } from './ai/engine';
+import { InstallGuide } from './components/InstallGuide';
 import { useStore } from './store/useStore';
 
 type Screen = 'teams' | 'match' | 'settings';
@@ -35,6 +36,7 @@ export default function App() {
       </header>
 
       <main className="main">
+        <InstallGuide variant="banner" />
         {screen === 'teams' && <TeamsScreen />}
         {screen === 'match' && <MatchScreen goTeams={() => setScreen('teams')} />}
         {screen === 'settings' && <SettingsScreen />}

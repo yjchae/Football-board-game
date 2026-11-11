@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { testConnection } from '../ai/engine';
+import { InstallGuide } from '../components/InstallGuide';
 import type { EngineKind } from '../domain/types';
 import { DEFAULT_SETTINGS, useStore } from '../store/useStore';
 
@@ -40,6 +41,8 @@ export function SettingsScreen() {
   return (
     <div className="settings">
       <h2 className="hero-title">AI <span>연결</span></h2>
+
+      <InstallGuide variant="panel" />
 
       <div className="engine-cards">
         {ENGINES.map((e) => (
@@ -110,8 +113,8 @@ export function SettingsScreen() {
       </section>
 
       <aside className="notice-box">
-        🔒 API 키는 이 기기의 브라우저에만 저장되고, AI 서버(구글/Anthropic)로만 직접 전송돼요.
-        공용 컴퓨터에서는 사용 후 키를 지워 주세요. AI 사용량에 따라 요금이 나올 수 있으니 보호자 계정으로 관리해 주세요.
+        🔒 API 키는 <b>이 기기에만</b> 저장돼요. 다른 사람이 같은 주소로 접속해도 이 키를 쓸 수 없고,
+        이 기기(홈 화면 앱)로 게임하는 사람만 이 키를 사용해요. AI 서버(구글/Anthropic)로만 직접 전송돼요. AI 사용량에 따라 요금이 나올 수 있으니 보호자 계정으로 관리해 주세요.
       </aside>
     </div>
   );

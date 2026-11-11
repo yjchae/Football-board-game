@@ -1,0 +1,17 @@
+{
+  "name": "카드 풋볼 리그",
+  "short_name": "카드풋볼",
+  "description": "축구 카드로 팀을 만들고 AI가 중계하는 보드게임",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#06140d",
+  "theme_color": "#06140d",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
