@@ -16,6 +16,16 @@ describe('실존 선수 명단', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
+  it('리그마다 11명 선발(GK1·DF4·MF3·FW3)을 채울 만큼 선수가 있다', () => {
+    for (const league of LEAGUES) {
+      const roles = countRoles(REAL_PLAYERS.filter((p) => p.league === league.id));
+      expect(roles.GK).toBeGreaterThanOrEqual(1);
+      expect(roles.DF).toBeGreaterThanOrEqual(4);
+      expect(roles.MF).toBeGreaterThanOrEqual(3);
+      expect(roles.FW).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it('5개 리그 모두 선수가 있고 OVR은 1~99 사이', () => {
     for (const league of LEAGUES) expect(REAL_PLAYERS.some((p) => p.league === league.id)).toBe(true);
     for (const p of REAL_PLAYERS) expect(p.overall).toBeGreaterThanOrEqual(1), expect(p.overall).toBeLessThanOrEqual(99);
@@ -45,9 +55,13 @@ describe('draftRandomPlayers', () => {
   });
 
   it('고른 리그에 포지션이 모자라면 다른 리그에서 채운다', () => {
-    const squad = draftRandomPlayers({ leagues: ['MLS'], size: 16, rng: seededRng(3) });
+    // MLS 골키퍼를 1명만 남긴 작은 명단 → 16명(골키퍼 2명)을 뽑으면 1명은 다른 리그에서
+    const pool = REAL_PLAYERS.filter((p) => p.league !== 'MLS' || p.role !== 'GK' || p.name === '위고 요리스');
+    const squad = draftRandomPlayers({ leagues: ['MLS'], size: 16, rng: seededRng(3), pool });
     expect(squad).toHaveLength(16);
-    expect(squad.some((p) => p.league !== 'MLS')).toBe(true);
+    const keepers = squad.filter((p) => p.role === 'GK');
+    expect(keepers.map((p) => p.league).sort()).not.toEqual(['MLS', 'MLS']);
+    expect(keepers.some((p) => p.name === '위고 요리스')).toBe(true);
   });
 
   it('1명 뽑기', () => {
