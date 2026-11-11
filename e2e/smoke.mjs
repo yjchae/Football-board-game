@@ -24,6 +24,8 @@ async function run(name, contextOptions) {
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(`[${name}] ${e.message}`));
+  // 킥오프 때 '전술 미작성' 확인창이 뜨면 그대로 진행
+  page.on('dialog', (d) => d.accept());
   page.on('console', (m) => m.type() === 'error' && errors.push(`[${name}] console: ${m.text()}`));
 
   // 빠른 테스트를 위해 중계 속도를 최소로

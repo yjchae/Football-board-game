@@ -8,6 +8,7 @@ import {
   Spotlight,
   TacticsPanel,
 } from '../components/MatchParts';
+import { confirmMissingTactics, TacticReveal, TacticsBoard } from '../components/TacticNotes';
 import { onPitchIds } from '../domain/formations';
 import { isLastSegmentOfHalf, scoreOf, SEGMENTS } from '../domain/match';
 import type { Team } from '../domain/types';
@@ -105,7 +106,7 @@ function LiveMatch({ home, away, onExit }: { home: Team; away: Team; onExit(): v
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
-  const { state, kickoff, requestTimeout, resume, updateSide } = useMatch({ home, away }, engine, settings.playbackMs);
+  const { state, kickoff, requestTimeout, resume, updateSide, setTactic } = useMatch({ home, away }, engine, settings.playbackMs);
   const sides = { home: state.home, away: state.away };
   const score = scoreOf(state.events);
   const half = SEGMENTS[state.segIndex]?.half ?? 1;
@@ -117,6 +118,11 @@ function LiveMatch({ home, away, onExit }: { home: Team; away: Team; onExit(): v
     halftime: '하프타임',
     fulltime: '경기 종료',
   }[state.phase];
+
+  // 전술을 안 쓴 팀이 있으면 확인 후 진행 (경기 전 = 전반 전술, 하프타임 = 후반 전술)
+  const startHalf = (tacticHalf: 1 | 2) => {
+    if (confirmMissingTactics(sides, state.tactics, tacticHalf)) kickoff();
+  };
 
   const firstHalfEvents = state.events.filter((e) => e.minute <= 45);
   const secondHalfEvents = state.events.filter((e) => e.minute > 45);
@@ -144,8 +150,11 @@ function LiveMatch({ home, away, onExit }: { home: Team; away: Team; onExit(): v
       {/* 단계별 메인 영역 */}
       {state.phase === 'ready' && (
         <div className="stage">
+          <TacticsBoard sides={sides} tactics={state.tactics} half={1} onSave={setTactic} />
           <TacticsPanel sides={sides} beforeKickoff onUpdate={(s, next) => updateSide(s, next)} />
-          <button className="btn btn--primary btn--xl btn--float" onClick={kickoff}>🎉 킥오프!</button>
+          <button className="btn btn--primary btn--xl btn--float" onClick={() => startHalf(1)} data-testid="kickoff">
+            🎉 킥오프!
+          </button>
         </div>
       )}
 
@@ -174,9 +183,16 @@ function LiveMatch({ home, away, onExit }: { home: Team; away: Team; onExit(): v
         <div className="stage">
           <HalfSummaryCard summary={state.summaries[0]} sides={sides} />
           <HighlightReel events={firstHalfEvents} sides={sides} title="전반 하이라이트" />
+          <TacticsBoard
+            sides={sides}
+            tactics={state.tactics}
+            half={2}
+            onSave={setTactic}
+            firstHalfStats={state.summaries[0].stats}
+          />
           <h3 className="stage__title">🔁 하프타임 — 선수 교체 · 포지션 정비</h3>
           <TacticsPanel sides={sides} onUpdate={updateSide} />
-          <button className="btn btn--primary btn--xl btn--float" onClick={kickoff} data-testid="start-second-half">
+          <button className="btn btn--primary btn--xl btn--float" onClick={() => startHalf(2)} data-testid="start-second-half">
             ▶ 후반 시작
           </button>
         </div>
@@ -185,6 +201,7 @@ function LiveMatch({ home, away, onExit }: { home: Team; away: Team; onExit(): v
       {state.phase === 'fulltime' && (
         <div className="stage">
           <FinalBanner home={state.home.team} away={state.away.team} score={score} />
+          <TacticReveal sides={sides} tactics={state.tactics} />
           {state.summaries[1] && <HalfSummaryCard summary={state.summaries[1]} sides={sides} />}
           <HighlightReel events={secondHalfEvents} sides={sides} title="후반 하이라이트" />
           {state.summaries[0] && <HalfSummaryCard summary={state.summaries[0]} sides={sides} />}

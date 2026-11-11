@@ -389,6 +389,171 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
 
 .tactics { margin-top: 10px; }
 
+/* ─────────── 감독 전술 노트 (docs/07 8장) ─────────── */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* 보드 (두 팀 카드) */
+.tboard { margin: 8px 0 20px; }
+.tboard__hint { margin: 4px 0 14px; }
+.tboard__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.tboard__grid > * { min-width: 0; }
+.tboard__progress { text-align: center; margin: 12px 0 0; font-size: 0.9rem; color: var(--muted); }
+.tboard__progress--done { color: var(--ok); }
+
+/* 팀 카드 (카드 전체가 button) */
+.tcard {
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+  min-height: 150px; width: 100%; padding: 16px 18px;
+  text-align: left; color: var(--text);
+  border: 1.5px solid color-mix(in srgb, var(--team) 60%, var(--line));
+  border-left: 5px solid var(--team);
+  border-radius: var(--radius);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--team) 22%, var(--surface)), var(--surface) 70%);
+  transition: transform 0.15s, box-shadow 0.2s, border-color 0.2s;
+}
+.tcard:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35); }
+.tcard:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.tcard:active { transform: scale(0.98); }
+.tcard__side { font-family: var(--font-num); font-size: 0.75rem; letter-spacing: 0.3em; color: var(--muted); }
+.tcard__team { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; }
+.tcard__emoji { font-size: 2.4rem; line-height: 1; filter: drop-shadow(0 0 10px var(--team)); }
+.tcard__name { font-family: var(--font-display); font-size: 1.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tcard__state { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; font-weight: 700; padding: 6px 12px; border-radius: 10px; }
+.tcard__half { font-family: var(--font-num); font-size: 0.7rem; letter-spacing: 0.1em; padding: 1px 6px; border-radius: 6px; background: var(--bg-2); color: var(--muted); }
+.tcard__sub { font-size: 0.82rem; color: var(--muted); margin: 0; }
+.tcard__cta { margin-top: auto; font-weight: 700; color: var(--accent); }
+
+/* 상태 변형 — 색 + 테두리 모양을 함께 바꾼다 */
+.tcard--empty {
+  border-style: dashed; border-left-style: solid;
+  border-color: var(--line); border-left-color: var(--team);
+  background: var(--surface);
+}
+.tcard--empty .tcard__state { background: rgba(255, 181, 71, 0.12); color: var(--warn); }
+.tcard--saved .tcard__state,
+.tcard--resaved .tcard__state { background: rgba(93, 255, 176, 0.12); color: var(--ok); }
+.tcard--kept { background: linear-gradient(150deg, color-mix(in srgb, var(--team) 10%, var(--surface)), var(--surface) 70%); }
+.tcard--kept .tcard__state { background: var(--surface-2); color: var(--text); }
+.tcard--just-saved { animation: pop 0.4s ease-out; }
+
+/* 작성 시트 */
+.tsheet-backdrop { align-items: center; }
+.tsheet {
+  width: min(560px, 100%); max-height: 92vh; max-height: 92dvh; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 24px;
+  animation: rise 0.25s ease-out;
+}
+.tsheet__grab { display: none; }
+.tsheet__head {
+  position: relative; display: flex; align-items: center; gap: 12px;
+  padding: 18px 22px;
+  background: linear-gradient(110deg, color-mix(in srgb, var(--team) 35%, var(--surface)), var(--surface) 80%);
+  border-bottom: 1px solid var(--line);
+}
+.tsheet__emoji { font-size: 2.4rem; line-height: 1; filter: drop-shadow(0 0 12px var(--team)); }
+.tsheet__titles { flex: 1; min-width: 0; }
+.tsheet__title { font-family: var(--font-display); font-size: 1.4rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tsheet__meta { font-family: var(--font-num); font-size: 0.75rem; letter-spacing: 0.2em; color: var(--muted); }
+.tsheet__close { min-width: 44px; min-height: 44px; }
+.tsheet__body { padding: 18px 22px 22px; }
+.tsheet__secret { display: block; margin: 0 0 14px; }
+.tsheet__stats { margin: 0 0 8px; color: var(--accent); font-weight: 700; }
+.tsheet__prefill { margin: 0 0 12px; }
+.tsheet__chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 14px; }
+.tsheet__label { font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 6px; }
+.tsheet__textarea {
+  width: 100%; min-height: 128px; resize: vertical;
+  background: var(--bg-2); color: var(--text);
+  border: 1.5px solid var(--line); border-radius: 14px;
+  padding: 12px 14px; font: inherit; font-size: 1rem; line-height: 1.6; outline: none;
+}
+.tsheet__textarea:focus { border-color: var(--accent); }
+.tsheet__textarea::placeholder { color: var(--muted); opacity: 0.8; }
+.tsheet__under { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; }
+.tsheet__count { font-family: var(--font-num); font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+.tsheet__count--near { color: var(--warn); }
+.tsheet__count--full { color: var(--danger); }
+.tsheet__preview { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: var(--bg-2); font-size: 0.9rem; color: var(--muted); }
+.tsheet__preview b { color: var(--text); }
+.tsheet__foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+/* 가림막(다시 열기 확인) */
+.tsheet__guard { text-align: center; padding: 26px 8px 6px; }
+.tsheet__guard-icon { font-size: 3.4rem; animation: bounce 1.4s ease-in-out infinite; }
+.tsheet__guard h4 { font-family: var(--font-display); font-size: 1.4rem; margin: 10px 0 6px; }
+.tsheet__guard .tsheet__foot { justify-content: center; }
+
+/* 빠른 선택 칩 — 기존 .chip(선수 칩)과 충돌하지 않도록 .tchip */
+.tchip {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; padding: 8px 14px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg-2); color: var(--text); font-weight: 700; white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, transform 0.12s;
+}
+.tchip:hover:not(:disabled) { border-color: var(--accent); }
+.tchip:active:not(:disabled) { transform: scale(0.94); background: var(--accent); color: var(--accent-ink); }
+.tchip:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.tchip:disabled { opacity: 0.45; }
+.tchip--used { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+.tchip--used::after { content: '✓'; color: var(--accent); font-size: 0.8rem; }
+.tchip--deny { animation: shake 0.3s; border-color: var(--danger); }
+
+/* 종료 화면: 전술 공개 */
+.treveal { margin: 20px 0; }
+.treveal__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.treveal__grid > * { min-width: 0; }
+.treveal__card {
+  background: var(--surface); border: 1px solid var(--line); border-top: 4px solid var(--team);
+  border-radius: var(--radius); padding: 16px 18px;
+  animation: pop 0.35s ease-out both;
+}
+.treveal__card:nth-child(2) { animation-delay: 120ms; }
+.treveal__team { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 1.2rem; margin-bottom: 10px; }
+.treveal__list { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; }
+.treveal__half { font-family: var(--font-num); font-size: 0.75rem; letter-spacing: 0.15em; color: var(--accent); padding-top: 3px; }
+.treveal__body { margin: 0; min-width: 0; }
+.treveal__text { margin: 0; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
+.treveal__text--kept, .treveal__text--none { color: var(--muted); font-style: italic; }
+.treveal__keys { margin: 4px 0 0; color: var(--accent); }
+.treveal__edge { margin: 12px 0 0; padding: 10px 14px; border-radius: 12px; background: rgba(255, 181, 71, 0.12); color: var(--warn); font-weight: 700; }
+
+@keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@keyframes sheet-up { from { transform: translateY(100%); } }
+
+@media (max-width: 560px) {
+  .tboard__grid, .treveal__grid { grid-template-columns: 1fr; gap: 10px; }
+
+  .tcard { min-height: 76px; padding: 12px 14px; gap: 6px; }
+  .tcard__side { display: none; }
+  .tcard__emoji { font-size: 1.8rem; }
+  .tcard__name { font-size: 1.05rem; }
+  .tcard__sub { display: none; }
+  .tcard__cta { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); margin: 0; font-size: 0; }
+  .tcard__cta::after { content: '›'; font-size: 1.6rem; color: var(--accent); }
+  .tcard__team { padding-right: 24px; }
+
+  .tsheet-backdrop { align-items: flex-end; padding: 0; }
+  .tsheet {
+    width: 100%; border-radius: 24px 24px 0 0; border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheet-up 0.28s ease-out;
+  }
+  .tsheet__grab { display: block; width: 44px; height: 5px; border-radius: 5px; background: var(--line); margin: 8px auto 0; }
+  .tsheet__head { padding: 12px 16px; }
+  .tsheet__emoji { font-size: 1.9rem; }
+  .tsheet__title { font-size: 1.15rem; }
+  .tsheet__body { padding: 14px 16px 16px; }
+  .tsheet__chips { flex-wrap: nowrap; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; margin-inline: -16px; padding-inline: 16px; }
+  .tchip { scroll-snap-align: start; flex: 0 0 auto; }
+  .tsheet__textarea { min-height: 104px; font-size: 16px; }
+  .tsheet__foot .btn { flex: 1; }
+}
+
 .splash { min-height: 100vh; display: flex; align-items: center; justify-content: center; font-size: 3rem; }
 .save-warning { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; margin-bottom: 16px; border-radius: 14px; background: rgba(255, 93, 115, 0.14); border: 1px solid rgba(255, 93, 115, 0.5); color: #ffd0d7; font-weight: 700; }
 

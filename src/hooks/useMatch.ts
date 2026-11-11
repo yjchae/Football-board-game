@@ -12,6 +12,7 @@ import {
   type SegmentContext,
   type SegmentResult,
 } from '../domain/match';
+import { activeTactic, normalizeTactic, type Half, type TacticNote } from '../domain/tactics';
 import type { HalfSummary, MatchEvent, Side, Team } from '../domain/types';
 
 // ─────────────────────────────────────────────
@@ -43,6 +44,8 @@ export interface MatchState {
   /** 방금 공개된 하이라이트 (연출용) */
   spotlight?: MatchEvent;
   notice?: string;
+  /** 감독 전술 노트 (경기 종료 전까지 화면에 원문을 보여 주지 않는다) */
+  tactics: Record<Side, TacticNote>;
 }
 
 export type Action =
@@ -55,7 +58,8 @@ export type Action =
   | { type: 'RESUME' }
   | { type: 'UPDATE_SIDE'; side: Side; next: MatchSide; log?: string }
   | { type: 'CLEAR_SPOTLIGHT' }
-  | { type: 'NOTICE'; text?: string };
+  | { type: 'NOTICE'; text?: string }
+  | { type: 'SET_TACTIC'; side: Side; half: Half; text: string };
 
 export function init(teams: { home: Team; away: Team }): MatchState {
   return {
@@ -70,6 +74,7 @@ export function init(teams: { home: Team; away: Team }): MatchState {
     timeoutRequested: false,
     clock: 0,
     summaries: [],
+    tactics: { home: {}, away: {} },
   };
 }
 
@@ -94,6 +99,39 @@ function applyEventEffects(state: MatchState, e: MatchEvent): MatchState {
     return { ...state, [e.side]: { ...side, injured: [...side.injured, e.playerId] } };
   }
   return state;
+}
+
+// ─────────────── 감독 전술 노트 ───────────────
+
+/** 전반 전술은 경기 전에만, 후반 전술은 하프타임에만 쓸 수 있다 */
+function canWriteTactic(phase: Phase, half: Half): boolean {
+  return (phase === 'ready' && half === 1) || (phase === 'halftime' && half === 2);
+}
+
+function setTactic(state: MatchState, side: Side, half: Half, text: string): MatchState {
+  if (!canWriteTactic(state.phase, half)) return state;
+  const clean = normalizeTactic(text);
+  const note = state.tactics[side];
+  // 전반: 빈 글 = 미작성. 후반: 빈 글도 "후반엔 작전 없이"라는 뜻으로 저장한다
+  const next: TacticNote = half === 1 ? { ...note, first: clean || undefined } : { ...note, second: clean };
+  return { ...state, tactics: { ...state.tactics, [side]: next } };
+}
+
+/** 후반 킥오프 때 "전술을 바꿨다"는 사실만 알린다 (내용은 비밀) */
+function tacticChangeEvents(state: MatchState, minute: number): MatchEvent[] {
+  return (['home', 'away'] as Side[])
+    .filter((side) => {
+      const { first, second } = state.tactics[side];
+      return second !== undefined && second !== (first ?? '');
+    })
+    .map((side) => ({
+      id: eventId(),
+      minute,
+      type: 'info' as const,
+      side: null,
+      text: `📋 ${state[side].team.name} 감독이 후반 전술을 바꿨어요!`,
+      highlight: false,
+    }));
 }
 
 function buildHalfSummary(state: MatchState): HalfSummary {
@@ -126,7 +164,8 @@ export function reducer(state: MatchState, action: Action): MatchState {
         text: segIndex === 0 ? '🎉 킥오프! 경기가 시작됩니다!' : '📣 후반전이 시작됩니다!',
         highlight: false,
       };
-      return { ...state, phase: 'playing', segIndex, segmentLoaded: false, clock: minute, events: [...state.events, info] };
+      const changed = segIndex === 3 ? tacticChangeEvents(state, minute) : [];
+      return { ...state, phase: 'playing', segIndex, segmentLoaded: false, clock: minute, events: [...state.events, info, ...changed] };
     }
     case 'FETCH_START':
       return { ...state, fetching: true };
@@ -211,6 +250,8 @@ export function reducer(state: MatchState, action: Action): MatchState {
       return { ...state, spotlight: undefined };
     case 'NOTICE':
       return { ...state, notice: action.text };
+    case 'SET_TACTIC':
+      return setTactic(state, action.side, action.half, action.text);
   }
 }
 
@@ -221,17 +262,21 @@ export function reducer(state: MatchState, action: Action): MatchState {
 
 /** 경기 상태 → 엔진에 넘길 구간 상황 */
 export function buildSegmentContext(state: MatchState): SegmentContext {
+  const segment = SEGMENTS[state.segIndex];
   return {
-    segment: SEGMENTS[state.segIndex],
+    segment,
     isLastOfHalf: isLastSegmentOfHalf(state.segIndex),
-    home: buildSideContext('home', state.home),
-    away: buildSideContext('away', state.away),
+    home: buildSideContext('home', state.home, activeTactic(state.tactics.home, segment.half)),
+    away: buildSideContext('away', state.away, activeTactic(state.tactics.away, segment.half)),
     score: scoreOf(state.events),
     history: state.events.filter((e) => e.type !== 'info'),
   };
 }
 
-/** 미리 받은 결과를 그대로 써도 되는지 비교하는 열쇠 (이벤트 id처럼 매번 달라지는 값은 뺀다) */
+/**
+ * 미리 받은 결과를 그대로 써도 되는지 비교하는 열쇠 (이벤트 id처럼 매번 달라지는 값은 뺀다)
+ * SideContext.tactic(전술 원문)도 들어가므로 전술이 바뀌면 미리 받은 결과는 버려진다.
+ */
 export function contextKey(ctx: SegmentContext): string {
   return JSON.stringify({
     segment: ctx.segment,
@@ -318,6 +363,10 @@ export function useMatch(teams: { home: Team; away: Team }, engine: MatchEngine,
       [],
     ),
     notice: useCallback((text?: string) => dispatch({ type: 'NOTICE', text }), []),
+    setTactic: useCallback(
+      (side: Side, half: Half, text: string) => dispatch({ type: 'SET_TACTIC', side, half, text }),
+      [],
+    ),
   };
 
   return { state, ...actions };

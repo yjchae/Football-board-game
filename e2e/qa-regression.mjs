@@ -19,6 +19,7 @@ const FAST = () => localStorage.setItem('card-football-v1', JSON.stringify({ sta
 // ─────────────── Q1: 후반 시작 연타 / Q3: 킥오프 전 교체 ───────────────
 {
   const p = await (await b.newContext({ viewport: { width: 1280, height: 1400 } })).newPage();
+  p.on('dialog', (d) => d.accept()); // 전술 미작성 확인창 → 그대로 킥오프
   await p.addInitScript(FAST);
   await p.goto(URL);
   await p.getByText('연습용 팀 2개 불러오기').click();
@@ -53,6 +54,7 @@ const FAST = () => localStorage.setItem('card-football-v1', JSON.stringify({ sta
 // ─────────────── R2-1: 고칠 수 없는 AI 오류는 한 번만, 잠깐 초과는 재시도 ───────────────
 async function firstHalfAiCalls(status, message) {
   const p = await (await b.newContext({ viewport: { width: 1280, height: 1000 } })).newPage();
+  p.on('dialog', (d) => d.accept()); // 전술 미작성 확인창 → 그대로 킥오프
   await p.addInitScript(() =>
     localStorage.setItem('card-football-v1', JSON.stringify({ state: { teams: [], settings: { engine: 'gemini', geminiKey: 'k', playbackMs: 40 } }, version: 0 })),
   );

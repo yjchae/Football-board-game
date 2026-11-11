@@ -52,6 +52,8 @@ export interface SideContext {
   formation: string;
   onPitch: FieldPlayer[];
   bench: Player[];
+  /** 이번 하프에 적용되는 감독 전술 노트 원문 (없으면 '' = 균형) */
+  tactic: string;
 }
 
 export interface SegmentContext {
@@ -103,7 +105,7 @@ export function benchPlayers(side: MatchSide): Player[] {
   return side.team.players.filter((p) => !onPitch.has(p.id) && !side.unavailable.includes(p.id));
 }
 
-export function buildSideContext(side: Side, ms: MatchSide): SideContext {
+export function buildSideContext(side: Side, ms: MatchSide, tactic = ''): SideContext {
   const byId = new Map(ms.team.players.map((p) => [p.id, p]));
   const onPitch: FieldPlayer[] = [];
   for (const slot of resolveSlots(ms.lineup)) {
@@ -117,6 +119,7 @@ export function buildSideContext(side: Side, ms: MatchSide): SideContext {
     formation: shapeName(ms.lineup),
     onPitch,
     bench: benchPlayers(ms),
+    tactic,
   };
 }
 

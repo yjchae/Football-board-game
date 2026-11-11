@@ -23,10 +23,12 @@ import {
   SAVE,
   SHOT_ON_TARGET,
   summaryText,
+  TACTIC_LINES,
   summaryTitle,
   YELLOW,
   type SummaryVars,
 } from './commentary';
+import { analyzeTactic, tacticModifiers, type Modifiers, type ParsedTactic } from './tactics';
 import type { MatchEvent, Player, Role, Side } from './types';
 
 // ─────────────────────────────────────────────
@@ -34,6 +36,8 @@ import type { MatchEvent, Player, Role, Side } from './types';
 // 능력치 기반 확률 시뮬레이터. (테스트를 위해 난수 함수 주입 가능)
 //   1단계 planSegment: 능력치로 '무슨 일이' 일어날지 정한다
 //   2단계 narrate:     시간 순서대로 점수 상황을 따라가며 해설을 붙인다
+// 감독 전술 노트는 1단계의 확률 기준값·배율만 바꾼다. rng() 호출 순서는 그대로라서
+// 두 팀 모두 균형(전술 없음)이면 같은 시드에서 예전과 완전히 같은 경기가 나온다.
 // ─────────────────────────────────────────────
 
 type Rng = () => number;
@@ -76,9 +80,10 @@ export function createLocalEngine(rng: Rng = Math.random): MatchEngine {
   return {
     label: '오프라인 엔진',
     async simulateSegment(ctx: SegmentContext): Promise<SegmentResult> {
-      const plans = planSegment(ctx, rng);
+      const tactics = { home: analyzeTactic(ctx.home.tactic), away: analyzeTactic(ctx.away.tactic) };
+      const plans = planSegment(ctx, sideModifiers(tactics), rng);
       plans.sort((a, b) => a.minute - b.minute);
-      const events = narrate(plans, ctx, voice, rng);
+      const events = narrate(plans, ctx, tactics, voice, rng);
       const result: SegmentResult = { events };
       if (ctx.isLastOfHalf) result.summary = localSummary(ctx, events, voice);
       return result;
@@ -88,7 +93,14 @@ export function createLocalEngine(rng: Rng = Math.random): MatchEngine {
 
 // ─────────────── 1단계: 능력치로 사건 정하기 ───────────────
 
-function planSegment(ctx: SegmentContext, rng: Rng): Plan[] {
+type Tactics = Record<Side, ParsedTactic>;
+
+/** 상성 계산에 두 팀 정보가 모두 필요해서 구간 시작 때 함께 계산한다 */
+function sideModifiers(t: Tactics): Record<Side, Modifiers> {
+  return { home: tacticModifiers(t.home, t.away), away: tacticModifiers(t.away, t.home) };
+}
+
+function planSegment(ctx: SegmentContext, mods: Record<Side, Modifiers>, rng: Rng): Plan[] {
   const { start, end } = ctx.segment;
   const minute = () => start + 1 + Math.floor(rng() * (end - start));
   const plans: Plan[] = [];
@@ -100,15 +112,21 @@ function planSegment(ctx: SegmentContext, rng: Rng): Plan[] {
     const their = teamPower(opp);
     const keeper = opp.onPitch.find((fp) => fp.slotRole === 'GK')?.player;
     const defender = () => pickPlayer(opp, ['DF'], rng);
+    // 전술 보정 (S = 우리 팀, O = 상대 팀). 균형이면 controlAdd 0, 배율 1 → 기존 식과 같다
+    const S = mods[side];
+    const O = mods[other(side)];
 
     // 중원 싸움이 기회 수를 결정
-    const control = clamp(0.5 + (my.midfield - their.midfield) / 120, 0.25, 0.75);
-    const chances = Math.round(0.4 + control * 2 + rng() * 1.2);
+    const control = clamp(0.5 + (my.midfield - their.midfield) / 120 + (S.controlAdd - O.controlAdd), 0.25, 0.75);
+    const chanceMul = clamp(S.chancesMul * O.concedeMul, 0.75, 1.3);
+    const chances = Math.round((0.4 + control * 2 + rng() * 1.2) * chanceMul);
+    const goalAdd = clamp(S.goalAdd + O.concedeGoalAdd, -0.03, 0.03);
 
     for (let i = 0; i < chances; i++) {
       const shooter = pickPlayer(me, ['FW', 'FW', 'MF'], rng);
       if (!shooter) continue;
-      const goalChance = clamp(0.12 + (my.attack - (their.defense + their.keeper) / 2) / 200, 0.04, 0.3);
+      const baseChance = clamp(0.12 + (my.attack - (their.defense + their.keeper) / 2) / 200, 0.04, 0.3);
+      const goalChance = clamp(baseChance + goalAdd, 0.04, 0.3);
       const roll = rng();
       const m = minute();
 
@@ -127,14 +145,15 @@ function planSegment(ctx: SegmentContext, rng: Rng): Plan[] {
 
     const anyone = () => pickPlayer(me, ['DF', 'MF', 'FW'], rng);
     const p1 = anyone();
-    if (p1 && rng() < 0.5) plans.push({ kind: 'corner', minute: minute(), side, player: pickPlayer(me, ['MF'], rng) ?? p1 });
+    if (p1 && rng() < Math.min(0.75, 0.5 * S.cornerMul)) plans.push({ kind: 'corner', minute: minute(), side, player: pickPlayer(me, ['MF'], rng) ?? p1 });
     const fw = pickPlayer(me, ['FW'], rng);
-    if (fw && rng() < 0.2) plans.push({ kind: 'offside', minute: minute(), side, player: fw });
+    if (fw && rng() < Math.min(0.35, 0.2 * S.offsideMul)) plans.push({ kind: 'offside', minute: minute(), side, player: fw });
 
     const fouler = pickPlayer(me, ['DF', 'MF'], rng);
-    if (fouler && rng() < 0.45) {
+    if (fouler && rng() < Math.min(0.6, 0.45 * S.foulMul)) {
       const r = rng();
-      plans.push({ kind: 'card', minute: minute(), side, player: fouler, type: r < 0.04 ? 'red' : r < 0.3 ? 'yellow' : 'foul' });
+      const type = r < 0.04 * S.cardMul ? 'red' : r < 0.3 * S.cardMul ? 'yellow' : 'foul';
+      plans.push({ kind: 'card', minute: minute(), side, player: fouler, type });
     }
     const hurt = anyone();
     if (hurt && rng() < 0.06) plans.push({ kind: 'injury', minute: minute(), side, player: hurt });
@@ -149,8 +168,23 @@ function planSegment(ctx: SegmentContext, rng: Rng): Plan[] {
 
 // ─────────────── 2단계: 시간 순서대로 해설 붙이기 ───────────────
 
-function narrate(plans: Plan[], ctx: SegmentContext, voice: Commentator, rng: Rng): MatchEvent[] {
+/**
+ * 전술이 있는 팀의 공격 전개 문장 하나를 전술 해설로 바꿀지 정한다.
+ * 하프의 첫·마지막 구간에서 팀당 1번씩만 → 팀·하프당 최대 2번.
+ * 문장은 분(minute)으로 고르므로 rng()를 쓰지 않는다 (난수 순서 보존).
+ */
+function tacticLine(t: ParsedTactic, ctx: SegmentContext, minute: number, vars: { team: string; s: string }): string | undefined {
+  const middleOfHalf = ctx.segment.start % 45 === 15;
+  const key = t.keys[minute % Math.max(1, t.keys.length)];
+  if (middleOfHalf || !key || key === 'balanced') return undefined;
+  const lines = TACTIC_LINES[key];
+  return lines[minute % lines.length](vars);
+}
+
+function narrate(plans: Plan[], ctx: SegmentContext, tactics: Tactics, voice: Commentator, rng: Rng): MatchEvent[] {
   const score = { ...ctx.score };
+  // 이번 구간에 전술 해설을 이미 쓴 팀
+  const toldTactic = new Set<Side>();
   // 이번 경기 득점 기록 (해트트릭 판단용)
   const goalsBy = new Map<string, number>();
   for (const e of ctx.history) if (e.type === 'goal' && e.playerId) goalsBy.set(e.playerId, (goalsBy.get(e.playerId) ?? 0) + 1);
@@ -191,14 +225,14 @@ function narrate(plans: Plan[], ctx: SegmentContext, voice: Commentator, rng: Rn
       case 'miss': {
         const v = { ...shotVars(p.shooter, p.defender, p.defender), m: p.midfielder.name };
         const buildUp = rng() < 0.35;
-        push({
-          minute: p.minute,
-          type: buildUp ? 'chance' : 'shot',
-          side: p.side,
-          playerId: p.shooter.id,
-          text: buildUp ? voice.pick('build', BUILD_UP, v) : voice.pick('miss', MISS, v),
-          highlight: false,
-        });
+        let text = buildUp ? voice.pick('build', BUILD_UP, v) : voice.pick('miss', MISS, v);
+        // 해설자는 원래대로 문장을 고른 뒤(난수 소비 동일), 전술 해설로 바꿔 끼운다
+        const told = buildUp && !toldTactic.has(p.side) ? tacticLine(tactics[p.side], ctx, p.minute, v) : undefined;
+        if (told) {
+          text = told;
+          toldTactic.add(p.side);
+        }
+        push({ minute: p.minute, type: buildUp ? 'chance' : 'shot', side: p.side, playerId: p.shooter.id, text, highlight: false });
         break;
       }
       case 'card': {
