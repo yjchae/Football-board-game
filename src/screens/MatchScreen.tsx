@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createEngine, engineLabel } from '../ai/engine';
 import { unlockNarration } from '../audio/narrator';
-import { unlockSfx } from '../audio/sfx';
+import { preloadSfx, unlockSfx } from '../audio/sfx';
 import { MatchHistory } from '../components/MatchHistory';
 import {
   EventFeed,
@@ -123,7 +123,10 @@ function LiveMatch({ matchId, home, away, onExit }: { matchId: string; home: Tea
   );
   const sides = { home: state.home, away: state.away };
 
-  // 소리: 휘슬·골 함성 + 음성 해설
+  // 소리: 휘슬·킥·드리블·함성 효과음 + 음성 해설 (효과음 파일은 화면에 들어오자마자 미리 불러 둔다)
+  useEffect(() => {
+    if (settings.sfx) void preloadSfx();
+  }, [settings.sfx]);
   useMatchAudio({ events: state.events, homeName: home.name, awayName: away.name, sfx: settings.sfx, voice: settings.voice });
   const soundOn = settings.sfx || settings.voice;
   const toggleSound = () => updateSettings(soundOn ? { sfx: false, voice: false } : { sfx: true, voice: true });

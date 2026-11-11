@@ -1,10 +1,10 @@
-import type { MatchCue, MatchEvent } from '../domain/types';
+import type { EventType, MatchCue, MatchEvent } from '../domain/types';
 import type { SfxKind } from './sfx';
 
 // ─────────────────────────────────────────────
 // 중계 이벤트 → "소리로 낼 내용" 정하기 (순수 함수라 테스트하기 쉽다)
 //
-//  - 효과음: 킥오프·후반 시작 휘슬 / 전반 종료 / 경기 종료 / 골 함성
+//  - 효과음: 시작·종료 휘슬 / 골 함성 / 파울 휘슬 / 슈팅·킥·드리블 소리 / 선방 탄성
 //  - 음성 해설: 화면 문장에서 이모지를 빼고, 골·종료 때는 점수를 덧붙여 더 생생하게
 // ─────────────────────────────────────────────
 
@@ -28,6 +28,18 @@ const CUE_SFX: Record<MatchCue, SfxKind> = {
   'second-half': 'kickoff',
   halftime: 'halftime',
   fulltime: 'fulltime',
+};
+
+/** 일반 장면 종류 → 효과음 (없는 장면은 해설만) */
+const TYPE_SFX: Partial<Record<EventType, SfxKind>> = {
+  foul: 'foul',
+  yellow: 'foul',
+  red: 'foul',
+  offside: 'foul',
+  shot: 'shot',
+  save: 'save',
+  chance: 'dribble',
+  corner: 'kick',
 };
 
 /** 이모지·장식 기호를 지워서 음성 합성기가 "축구공" 같은 이름을 읽지 않게 한다 */
@@ -59,5 +71,5 @@ export function soundFor(event: MatchEvent, ctx: NarrationContext): SoundCue {
     return { sfx: CUE_SFX[event.cue], speech: body ? `${body}${extra}` : undefined, urgent: event.cue === 'fulltime' };
   }
 
-  return { speech: body || undefined, urgent: event.type === 'red' };
+  return { sfx: TYPE_SFX[event.type], speech: body || undefined, urgent: event.type === 'red' };
 }
