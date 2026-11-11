@@ -1,4 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
+import type { ThinkingLevel } from '@google/genai';
 
 // ─────────────────────────────────────────────
 // AI 제공자 공통 인터페이스: "텍스트(+이미지) → 텍스트"
@@ -17,11 +18,26 @@ export interface TextProvider {
 
 // ─────────────── Gemini ───────────────
 
+/** 한 번의 요청을 기다리는 최대 시간. 넘으면 끊고 재시도/오프라인 엔진으로 넘어간다. */
+const GEMINI_TIMEOUT_MS = 30_000;
+
+/**
+ * 모델별 "생각(thinking)" 설정.
+ * 2.5 / 3 계열은 기본으로 길게 생각해서 응답이 느리고, 생각에 출력 토큰을 써 버려
+ * JSON이 중간에 잘리는 원인이 된다. 경기 해설에는 깊은 추론이 필요 없으므로 최소로 줄인다.
+ */
+export function geminiThinkingConfig(model: string) {
+  if (/gemini-3/.test(model)) return { thinkingLevel: 'LOW' as ThinkingLevel };
+  if (/2\.5-pro/.test(model)) return { thinkingBudget: 128 }; // pro는 생각을 끌 수 없어 최솟값
+  if (/2\.5-flash/.test(model)) return { thinkingBudget: 0 }; // flash / flash-lite는 생각 끄기
+  return undefined; // 2.0 등 생각 기능이 없는 모델
+}
+
 export function geminiProvider(apiKey: string, model: string): TextProvider {
   return {
     async generate(system, prompt, image) {
       const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: GEMINI_TIMEOUT_MS } });
       const parts = [
         ...(image ? [{ inlineData: { mimeType: image.mimeType, data: image.base64 } }] : []),
         { text: prompt },
@@ -32,10 +48,14 @@ export function geminiProvider(apiKey: string, model: string): TextProvider {
         config: {
           systemInstruction: system,
           responseMimeType: 'application/json',
+          maxOutputTokens: 8192,
+          thinkingConfig: geminiThinkingConfig(model),
         },
       });
+      const finish = response.candidates?.[0]?.finishReason;
+      if (finish === 'MAX_TOKENS') throw new Error('제미나이 응답이 길이 제한으로 잘렸어요 (truncated).');
       const text = response.text;
-      if (!text) throw new Error('제미나이가 빈 응답을 보냈어요.');
+      if (!text) throw new Error(`제미나이가 빈 응답을 보냈어요.${finish ? ` (${finish})` : ''}`);
       return text;
     },
   };
