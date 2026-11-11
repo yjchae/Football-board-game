@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { autoLineup, changeFormation, emptyLineup } from '../domain/formations';
 import { lineupFromPhoto } from '../domain/positions';
-import type { AiSettings, Lineup, Player, Point, Team } from '../domain/types';
+import type { AiSettings, Lineup, MatchRecord, Player, Point, Team } from '../domain/types';
 import { uid } from '../utils/id';
 import { createDemoTeams } from './demoTeams';
 import { appStorage } from './storage';
@@ -24,7 +24,17 @@ export const DEFAULT_SETTINGS: AiSettings = {
   claudeKey: '',
   claudeModel: 'claude-opus-5-5',
   playbackMs: 1400,
+  sfx: true,
+  voice: true,
 };
+
+/** 경기 기록은 최근 이만큼만 남긴다 */
+export const MAX_HISTORY = 10;
+
+/** 새 기록을 맨 앞에 넣고 최근 MAX_HISTORY개만 남긴다 (같은 id는 한 번만) */
+export function pushRecord(history: MatchRecord[], record: MatchRecord): MatchRecord[] {
+  return [record, ...history.filter((r) => r.id !== record.id)].slice(0, MAX_HISTORY);
+}
 
 export const TEAM_COLORS = ['#c6ff3d', '#ff5d73', '#4dd7ff', '#ffb547', '#b38cff', '#ffffff'];
 export const TEAM_EMOJIS = ['🦁', '🐯', '🦅', '🐉', '🦈', '🐺', '⚡', '🔥', '🌟', '🚀'];
@@ -32,6 +42,8 @@ export const TEAM_EMOJIS = ['🦁', '🐯', '🦅', '🐉', '🦈', '🐺', '⚡
 interface State {
   teams: Team[];
   settings: AiSettings;
+  /** 최근 경기 기록 (최신이 맨 앞, 최대 MAX_HISTORY개) */
+  history: MatchRecord[];
 
   addTeam(name: string, emoji: string, color: string): string;
   updateTeam(teamId: string, patch: Partial<Pick<Team, 'name' | 'emoji' | 'color'>>): void;
@@ -49,6 +61,9 @@ interface State {
 
   updateSettings(patch: Partial<AiSettings>): void;
   loadDemo(): void;
+
+  addMatchRecord(record: MatchRecord): void;
+  clearHistory(): void;
 }
 
 const mapTeam = (teams: Team[], id: string, fn: (t: Team) => Team) => teams.map((t) => (t.id === id ? fn(t) : t));
@@ -58,6 +73,7 @@ export const useStore = create<State>()(
     (set) => ({
       teams: [],
       settings: DEFAULT_SETTINGS,
+      history: [],
 
       addTeam(name, emoji, color) {
         const id = uid('team-');
@@ -129,6 +145,13 @@ export const useStore = create<State>()(
       loadDemo() {
         set((s) => ({ teams: [...s.teams, ...createDemoTeams()] }));
       },
+
+      addMatchRecord(record) {
+        set((s) => ({ history: pushRecord(s.history, record) }));
+      },
+      clearHistory() {
+        set({ history: [] });
+      },
     }),
     {
       name: 'card-football-v1',
@@ -136,7 +159,12 @@ export const useStore = create<State>()(
       storage: createJSONStorage(() => appStorage),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<State>;
-        return { ...current, ...p, settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) } };
+        return {
+          ...current,
+          ...p,
+          settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) },
+          history: Array.isArray(p.history) ? p.history.slice(0, MAX_HISTORY) : [],
+        };
       },
     },
   ),
