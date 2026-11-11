@@ -4,7 +4,7 @@ import type { SfxKind } from './sfx';
 // ─────────────────────────────────────────────
 // 중계 이벤트 → "소리로 낼 내용" 정하기 (순수 함수라 테스트하기 쉽다)
 //
-//  - 효과음: 킥오프·후반 시작 휘슬 / 전반 종료 / 경기 종료 / 골 함성
+//  - 효과음: 킥오프·후반 시작 휘슬 / 전반 종료 / 경기 종료 / 골 함성 / 슈퍼 세이브 탄성
 //  - 음성 해설: 화면 문장에서 이모지를 빼고, 골·종료 때는 점수를 덧붙여 더 생생하게
 // ─────────────────────────────────────────────
 
@@ -57,6 +57,11 @@ export function soundFor(event: MatchEvent, ctx: NarrationContext): SoundCue {
   if (event.cue) {
     const extra = event.cue === 'halftime' || event.cue === 'fulltime' ? ` ${scoreLine(ctx)}` : '';
     return { sfx: CUE_SFX[event.cue], speech: body ? `${body}${extra}` : undefined, urgent: event.cue === 'fulltime' };
+  }
+
+  // 슈퍼 세이브 = 하이라이트로 뽑힌 선방 (평범한 선방은 함성 없이 해설만)
+  if (event.type === 'save' && event.highlight) {
+    return { sfx: 'save', speech: body ? `슈퍼 세이브! ${body}` : undefined, urgent: false };
   }
 
   return { speech: body || undefined, urgent: event.type === 'red' };

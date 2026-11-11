@@ -19,10 +19,24 @@ const results = [];
 const check = (ok, label) => results.push([Boolean(ok), label]);
 const errors = [];
 
-/** 가짜 오디오: 휘슬(사인파 2750Hz)·함성(버퍼 재생) 횟수와 낭독 문장을 window.__audio에 기록 */
+/**
+ * 가짜 오디오: 어떤 음원 파일을 재생했는지(files), 대체 합성 휘슬(사인파 2750Hz) 횟수(synthWhistles),
+ * 낭독 문장(speech)을 window.__audio에 기록
+ */
 function fakeAudio() {
-  const log = { whistles: 0, roars: 0, speech: [] };
+  const log = { files: [], synthWhistles: 0, speech: [] };
   window.__audio = log;
+  // 내려받은 음원 데이터 → 파일 이름 (decodeAudioData에서 어떤 소리인지 알아내려고)
+  const names = new WeakMap();
+  const realFetch = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const res = await realFetch(input, init);
+    const m = String(input).match(/(whistle-[a-z]+|crowd-[a-z]+)/);
+    if (!m || !res.ok) return res;
+    const data = await res.arrayBuffer();
+    names.set(data, m[1]);
+    return { ok: true, status: 200, arrayBuffer: async () => data };
+  };
   const node = () => ({ connect: (n) => n ?? node(), gain: param(), frequency: param(), Q: param(), start() {}, stop() {}, type: '' });
   const param = () => ({ value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} });
   class FakeCtx {
@@ -36,13 +50,14 @@ function fakeAudio() {
     createOscillator() {
       const o = node();
       const f = o.frequency;
-      o.start = () => { if (f.value === 2750) log.whistles += 1; };
+      o.start = () => { if (f.value === 2750) log.synthWhistles += 1; };
       return o;
     }
     createBuffer(_c, len) { return { getChannelData: () => new Float32Array(len) }; }
+    decodeAudioData(data) { return Promise.resolve({ name: names.get(data) ?? 'unknown' }); }
     createBufferSource() {
       const s = node();
-      s.start = () => { log.roars += 1; };
+      s.start = () => { if (s.buffer?.name) log.files.push(s.buffer.name); };
       return s;
     }
   }
@@ -57,10 +72,14 @@ function fakeAudio() {
   Object.defineProperty(window, 'speechSynthesis', { value: synth, configurable: true });
 }
 
-async function newPage(settings = {}) {
-  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1400 } })).newPage();
+async function newPage(settings = {}, contextOptions = {}, { expectBlockedRequests = false } = {}) {
+  const page = await (await browser.newContext({ viewport: { width: 1280, height: 1400 }, ...contextOptions })).newPage();
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  page.on('console', (m) => {
+    if (m.type() !== 'error') return;
+    if (expectBlockedRequests && m.text().includes('net::ERR_FAILED')) return; // 일부러 막은 요청
+    errors.push(m.text());
+  });
   page.on('dialog', (d) => d.accept());
   await page.addInitScript(fakeAudio);
   await page.addInitScript((s) => {
@@ -130,9 +149,17 @@ async function playFullMatch(page) {
   const score = (await page.getByTestId('score').innerText()).replace(/\s/g, '');
   const goals = score.split(':').map(Number).reduce((a, b) => a + b, 0);
 
-  // 휘슬: 킥오프 1 + 전반 종료 2 + 후반 시작 1 + 경기 종료 3 = 7번
-  check(audio.whistles === 7, `휘슬 7번 (킥오프1·전반종료2·후반시작1·종료3) → ${audio.whistles}번`);
-  check(audio.roars === goals, `골 함성 = 골 수 (${goals}골 → ${audio.roars}번)`);
+  const superSaves = await page.locator('[data-testid="feed"] .feed__item--save.feed__item--hl').count();
+  const played = (name) => audio.files.filter((f) => f === name).length;
+
+  // 휘슬 음원: 킥오프·후반 시작 = 1번 휘슬 파일, 전반 종료 = 2번 휘슬 파일, 경기 종료 = 3번 휘슬 파일
+  check(played('whistle-kickoff') === 2, `킥오프·후반 시작 휘슬 음원 2번 → ${played('whistle-kickoff')}번`);
+  check(played('whistle-halftime') === 1, `전반 종료 휘슬 음원 1번 → ${played('whistle-halftime')}번`);
+  check(played('whistle-fulltime') === 1, `경기 종료 휘슬 음원 1번 → ${played('whistle-fulltime')}번`);
+  check(audio.synthWhistles === 0, '음원을 불러왔으면 합성 휘슬은 쓰지 않음');
+  check(played('crowd-goal') === goals, `골 함성 음원 = 골 수 (${goals}골 → ${played('crowd-goal')}번)`);
+  check(played('crowd-save') === superSaves, `슈퍼 세이브 함성 = 슈퍼 세이브 수 (${superSaves}번 → ${played('crowd-save')}번)`);
+  check(audio.speech.filter((t) => t.startsWith('슈퍼 세이브!')).length === superSaves, '슈퍼 세이브 해설');
   check(audio.speech.some((t) => t.startsWith('킥오프')), '킥오프 해설');
   check(audio.speech.some((t) => t.includes('경기 종료') && /\d 대 \d/.test(t)), '경기 종료 해설 + 최종 점수');
   check(goals === 0 || audio.speech.filter((t) => t.includes('골')).length >= goals, '골마다 골 해설');
@@ -147,11 +174,26 @@ async function playFullMatch(page) {
   await page.getByRole('button', { name: '⚽ 경기 시작' }).click();
   await page.getByTestId('sound-toggle').click();
   check((await page.getByTestId('sound-toggle').innerText()).includes('소리 끔'), '경기 화면 빠른 음소거');
-  const before = await page.evaluate(() => window.__audio.whistles + window.__audio.speech.length);
+  const before = await page.evaluate(() => window.__audio.files.length + window.__audio.speech.length);
   await page.getByTestId('kickoff').click();
   await page.waitForTimeout(400);
-  const after = await page.evaluate(() => window.__audio.whistles + window.__audio.speech.length);
+  const after = await page.evaluate(() => window.__audio.files.length + window.__audio.speech.length);
   check(after === before, '음소거 상태에서는 휘슬·해설 없음');
+  await page.close();
+}
+
+// ─────────────── 3-2) 음원 파일을 못 받으면 합성 휘슬로 대체 ───────────────
+{
+  // 서비스 워커가 요청을 대신 처리하면 차단 규칙을 우회하므로 이 검사에서는 끈다
+  const page = await newPage({ voice: false }, { serviceWorkers: 'block' }, { expectBlockedRequests: true });
+  await page.route('**/*.mp3', (route) => route.abort());
+  await page.getByText('연습용 팀 2개 불러오기').click();
+  await page.getByRole('button', { name: /경기$/ }).click();
+  await page.getByRole('button', { name: '⚽ 경기 시작' }).click();
+  await page.getByTestId('kickoff').click();
+  await page.waitForTimeout(800);
+  const audio = await page.evaluate(() => window.__audio);
+  check(audio.files.length === 0 && audio.synthWhistles >= 1, `음원 차단 시 합성 휘슬로 대체 (합성 ${audio.synthWhistles}번)`);
   await page.close();
 }
 

@@ -56,6 +56,15 @@ describe('soundFor', () => {
     expect(soundFor(ev({ type: 'red', text: '🟥 퇴장!' }), ctx).urgent).toBe(true);
   });
 
+  it('슈퍼 세이브(하이라이트 선방)는 탄성 효과음 + "슈퍼 세이브!", 평범한 선방은 해설만', () => {
+    const superSave = soundFor(ev({ type: 'save', side: 'away', highlight: true, text: '🧤 몸을 날린 선방!' }), ctx);
+    expect(superSave.sfx).toBe('save');
+    expect(superSave.speech).toBe('슈퍼 세이브! 몸을 날린 선방!');
+    const normal = soundFor(ev({ type: 'save', side: 'away', highlight: false, text: '🧤 가볍게 잡아냅니다.' }), ctx);
+    expect(normal.sfx).toBeUndefined();
+    expect(normal.speech).toBe('가볍게 잡아냅니다.');
+  });
+
   it('이모지뿐인 문장은 읽지 않는다', () => {
     expect(soundFor(ev({ text: '⚽🔥' }), ctx).speech).toBeUndefined();
   });

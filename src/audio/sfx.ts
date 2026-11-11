@@ -1,14 +1,30 @@
+import crowdGoalUrl from '../assets/sounds/crowd-goal.mp3';
+import crowdSaveUrl from '../assets/sounds/crowd-save.mp3';
+import whistleFulltimeUrl from '../assets/sounds/whistle-fulltime.mp3';
+import whistleHalftimeUrl from '../assets/sounds/whistle-halftime.mp3';
+import whistleKickoffUrl from '../assets/sounds/whistle-kickoff.mp3';
+
 // ─────────────────────────────────────────────
-// 효과음 — 음원 파일 없이 Web Audio API로 직접 합성한다
+// 효과음
 //
-//  - 휘슬: 높은 사인파 + 빠른 떨림(LFO) → 심판 호루라기 느낌
-//  - 골: 걸러 낸 잡음(관중 함성)이 커졌다 잦아들고 + 응원 나팔
+//  1순위: 음원 파일 (src/assets/sounds/*.mp3)
+//    - 심판 휘슬(킥오프 1번·전반 종료 2번·경기 종료 3번), 골 함성, 슈퍼 세이브 탄성
+//    - 실제 녹음 파일로 바꾸려면 같은 이름의 mp3로 덮어쓰기만 하면 된다
+//  2순위: 파일을 못 불러오면 Web Audio로 즉석 합성한 소리 (경기가 조용해지지 않게)
 //
 // 브라우저는 "사용자가 누른 순간"에만 소리를 켤 수 있어서
-// 킥오프 버튼을 누를 때 unlock()을 불러 오디오를 깨워 둔다.
+// 킥오프 버튼을 누를 때 unlockSfx()로 오디오를 깨우고 음원도 미리 불러 둔다.
 // ─────────────────────────────────────────────
 
-export type SfxKind = 'kickoff' | 'halftime' | 'fulltime' | 'goal';
+export type SfxKind = 'kickoff' | 'halftime' | 'fulltime' | 'goal' | 'save';
+
+const SOUND_FILES: Record<SfxKind, { url: string; volume: number }> = {
+  kickoff: { url: whistleKickoffUrl, volume: 0.8 },
+  halftime: { url: whistleHalftimeUrl, volume: 0.8 },
+  fulltime: { url: whistleFulltimeUrl, volume: 0.8 },
+  goal: { url: crowdGoalUrl, volume: 1 },
+  save: { url: crowdSaveUrl, volume: 0.9 },
+};
 
 type AudioCtor = typeof AudioContext;
 
@@ -29,13 +45,41 @@ function getContext(): AudioContext | null {
   return ctx;
 }
 
-/** 사용자 터치 순간에 불러서 오디오를 깨운다 (iOS·크롬 자동재생 정책 대응) */
-export function unlockSfx(): void {
-  const ac = getContext();
-  if (ac && ac.state === 'suspended') void ac.resume().catch(() => undefined);
+// ─────────────── 음원 파일 불러오기 ───────────────
+
+const buffers = new Map<SfxKind, Promise<AudioBuffer | null>>();
+
+/** 음원을 한 번만 내려받아 해독해 둔다 (실패하면 null → 합성음으로 대체) */
+function loadBuffer(ac: AudioContext, kind: SfxKind): Promise<AudioBuffer | null> {
+  let pending = buffers.get(kind);
+  if (!pending) {
+    pending = fetch(SOUND_FILES[kind].url)
+      .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error(String(res.status)))))
+      .then((data) => ac.decodeAudioData(data))
+      .catch(() => null);
+    buffers.set(kind, pending);
+  }
+  return pending;
 }
 
-// ─────────────── 소리 조각 ───────────────
+function playBuffer(ac: AudioContext, buffer: AudioBuffer, volume: number) {
+  const source = ac.createBufferSource();
+  source.buffer = buffer;
+  const gain = ac.createGain();
+  gain.gain.value = volume;
+  source.connect(gain).connect(ac.destination);
+  source.start();
+}
+
+/** 사용자 터치 순간에 불러서 오디오를 깨우고, 음원을 미리 받아 둔다 (iOS·크롬 자동재생 정책 대응) */
+export function unlockSfx(): void {
+  const ac = getContext();
+  if (!ac) return;
+  if (ac.state === 'suspended') void ac.resume().catch(() => undefined);
+  (Object.keys(SOUND_FILES) as SfxKind[]).forEach((kind) => void loadBuffer(ac, kind));
+}
+
+// ─────────────── 대체용 합성음 (음원을 못 불러올 때) ───────────────
 
 /** 호루라기 한 번 (start초 뒤부터 length초 동안) */
 function whistle(ac: AudioContext, start: number, length: number) {
@@ -124,6 +168,17 @@ function hornFanfare(ac: AudioContext) {
 export function playSfx(kind: SfxKind): void {
   const ac = getContext();
   if (!ac) return;
+  void loadBuffer(ac, kind).then((buffer) => {
+    try {
+      if (buffer) playBuffer(ac, buffer, SOUND_FILES[kind].volume);
+      else playSynth(ac, kind);
+    } catch {
+      /* 오디오 오류로 경기가 멈추면 안 된다 */
+    }
+  });
+}
+
+function playSynth(ac: AudioContext, kind: SfxKind): void {
   try {
     switch (kind) {
       case 'kickoff':
@@ -141,6 +196,9 @@ export function playSfx(kind: SfxKind): void {
       case 'goal':
         crowdRoar(ac);
         hornFanfare(ac);
+        break;
+      case 'save':
+        crowdRoar(ac, 1.8);
         break;
     }
   } catch {
