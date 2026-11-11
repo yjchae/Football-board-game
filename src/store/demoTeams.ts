@@ -1,4 +1,5 @@
 import { autoLineup } from '../domain/formations';
+import { statsFromOverall } from '../domain/playerFactory';
 import type { Player, Role, Team } from '../domain/types';
 import { uid } from '../utils/id';
 
@@ -10,17 +11,7 @@ import { uid } from '../utils/id';
 type Seed = [name: string, num: number, pos: string, role: Role, ovr: number];
 
 function makePlayer([name, number, position, role, overall]: Seed): Player {
-  const v = (base: number, bonus: number) => Math.min(99, Math.max(20, Math.round(base + bonus)));
-  const o = overall;
-  const stats =
-    role === 'GK'
-      ? { pace: v(o, -25), shooting: v(o, -45), passing: v(o, -20), dribbling: v(o, -30), defending: v(o, -10), physical: v(o, -5) }
-      : role === 'DF'
-        ? { pace: v(o, -6), shooting: v(o, -30), passing: v(o, -10), dribbling: v(o, -12), defending: v(o, 6), physical: v(o, 4) }
-        : role === 'MF'
-          ? { pace: v(o, -4), shooting: v(o, -6), passing: v(o, 6), dribbling: v(o, 4), defending: v(o, -15), physical: v(o, -6) }
-          : { pace: v(o, 5), shooting: v(o, 6), passing: v(o, -8), dribbling: v(o, 3), defending: v(o, -40), physical: v(o, -4) };
-  return { id: uid('p-'), name, number, position, role, overall, stats };
+  return { id: uid('p-'), name, number, position, role, overall, stats: statsFromOverall(role, overall) };
 }
 
 function makeTeam(name: string, emoji: string, color: string, seeds: Seed[]): Team {

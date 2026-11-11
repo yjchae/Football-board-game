@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { LineupBoard } from '../components/LineupBoard';
 import { PlayerCard } from '../components/PlayerCard';
 import { PlayerEditor } from '../components/PlayerEditor';
+import { RandomDraft } from '../components/RandomDraft';
 import { TeamScanner } from '../components/TeamScanner';
 import { FORMATIONS, onPitchIds } from '../domain/formations';
 import { applyDrop } from '../domain/lineupOps';
@@ -115,6 +116,7 @@ function TeamDetail({ team }: { team: Team }) {
   const [tab, setTab] = useState<'roster' | 'lineup'>('roster');
   const [editing, setEditing] = useState<Player | 'new' | null>(null);
   const [bulkScan, setBulkScan] = useState(false);
+  const [randomDraft, setRandomDraft] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const starters = onPitchIds(team.lineup).length;
 
@@ -148,6 +150,10 @@ function TeamDetail({ team }: { team: Team }) {
             <span>🃏🃏🃏</span>
             여러 장 한 번에 찍어서<br />팀 등록
           </button>
+          <button className="add-card add-card--random" onClick={() => setRandomDraft(true)}>
+            <span>🎲</span>
+            실존 선수<br />랜덤 뽑기
+          </button>
           {team.players.map((p) => (
             <PlayerCard key={p.id} player={p} onClick={() => setEditing(p)} />
           ))}
@@ -180,6 +186,7 @@ function TeamDetail({ team }: { team: Team }) {
       )}
 
       {bulkScan && <TeamScanner team={team} onClose={() => setBulkScan(false)} />}
+      {randomDraft && <RandomDraft team={team} onClose={() => setRandomDraft(false)} />}
 
       {editing && (
         <PlayerEditor
