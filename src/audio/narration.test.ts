@@ -48,9 +48,18 @@ describe('soundFor', () => {
     expect(full.urgent).toBe(true);
   });
 
-  it('일반 장면은 효과음 없이 해설만, 퇴장은 급하게', () => {
+  it('장면 종류별 효과음: 파울류는 휘슬, 슈팅·선방·돌파·코너킥은 경기 소리', () => {
+    const sfxOf = (type: MatchEvent['type']) => soundFor(ev({ type }), ctx).sfx;
+    expect(['foul', 'yellow', 'red', 'offside'].map((t) => sfxOf(t as MatchEvent['type']))).toEqual(['foul', 'foul', 'foul', 'foul']);
+    expect(sfxOf('shot')).toBe('shot');
+    expect(sfxOf('save')).toBe('save');
+    expect(sfxOf('chance')).toBe('dribble');
+    expect(sfxOf('corner')).toBe('kick');
+  });
+
+  it('부상·교체·분위기 장면은 효과음 없이 해설만, 퇴장은 급하게', () => {
+    for (const type of ['injury', 'sub', 'info'] as const) expect(soundFor(ev({ type }), ctx).sfx).toBeUndefined();
     const plain = soundFor(ev({}), ctx);
-    expect(plain.sfx).toBeUndefined();
     expect(plain.speech).toBe('손흥민의 돌파!');
     expect(plain.urgent).toBe(false);
     expect(soundFor(ev({ type: 'red', text: '🟥 퇴장!' }), ctx).urgent).toBe(true);
@@ -63,7 +72,7 @@ describe('soundFor', () => {
   it('오디오가 없는 환경(테스트·서버)에서도 효과음·해설 함수가 오류 없이 지나간다', async () => {
     const { playSfx } = await import('./sfx');
     const { narrate, isNarrating } = await import('./narrator');
-    expect(() => playSfx('goal')).not.toThrow();
+    for (const kind of ['goal', 'foul', 'dribble'] as const) expect(() => playSfx(kind)).not.toThrow();
     expect(() => narrate('테스트')).not.toThrow();
     expect(isNarrating()).toBe(false);
   });

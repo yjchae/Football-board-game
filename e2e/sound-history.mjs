@@ -19,10 +19,18 @@ const results = [];
 const check = (ok, label) => results.push([Boolean(ok), label]);
 const errors = [];
 
-/** 가짜 오디오: 휘슬(사인파 2750Hz)·함성(버퍼 재생) 횟수와 낭독 문장을 window.__audio에 기록 */
+/**
+ * 가짜 오디오: 어떤 효과음 파일을 몇 번 틀었는지와 낭독 문장을 window.__audio에 기록
+ *  - sfx/*.mp3 요청은 "파일 이름"만 담은 가짜 응답으로 바꾸고, 디코딩 결과에 그 이름을 붙여 둔다
+ */
 function fakeAudio() {
-  const log = { whistles: 0, roars: 0, speech: [] };
+  const log = { clips: {}, synth: 0, speech: [] };
   window.__audio = log;
+  const realFetch = window.fetch.bind(window);
+  window.fetch = (url, init) => {
+    const m = String(url).match(/sfx\/([\w-]+)\.mp3/);
+    return m ? Promise.resolve(new Response(m[1])) : realFetch(url, init);
+  };
   const node = () => ({ connect: (n) => n ?? node(), gain: param(), frequency: param(), Q: param(), start() {}, stop() {}, type: '' });
   const param = () => ({ value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} });
   class FakeCtx {
@@ -35,14 +43,17 @@ function fakeAudio() {
     createBiquadFilter() { return node(); }
     createOscillator() {
       const o = node();
-      const f = o.frequency;
-      o.start = () => { if (f.value === 2750) log.whistles += 1; };
+      o.start = () => { log.synth += 1; };
       return o;
     }
     createBuffer(_c, len) { return { getChannelData: () => new Float32Array(len) }; }
+    decodeAudioData(data) { return Promise.resolve({ clip: new TextDecoder().decode(data) }); }
     createBufferSource() {
       const s = node();
-      s.start = () => { log.roars += 1; };
+      s.start = () => {
+        const name = s.buffer?.clip;
+        if (name) log.clips[name] = (log.clips[name] ?? 0) + 1;
+      };
       return s;
     }
   }
@@ -127,12 +138,18 @@ async function playFullMatch(page) {
 
   await playFullMatch(page);
   const audio = await page.evaluate(() => window.__audio);
+  /** 'shot-'처럼 이름이 같은 묶음(shot-1, shot-2…)의 재생 횟수 합 */
+  audio.count = (prefix) => Object.entries(audio.clips).filter(([k]) => k.startsWith(prefix)).reduce((n, [, v]) => n + v, 0);
   const score = (await page.getByTestId('score').innerText()).replace(/\s/g, '');
   const goals = score.split(':').map(Number).reduce((a, b) => a + b, 0);
 
-  // 휘슬: 킥오프 1 + 전반 종료 2 + 후반 시작 1 + 경기 종료 3 = 7번
-  check(audio.whistles === 7, `휘슬 7번 (킥오프1·전반종료2·후반시작1·종료3) → ${audio.whistles}번`);
-  check(audio.roars === goals, `골 함성 = 골 수 (${goals}골 → ${audio.roars}번)`);
+  // 시작 휘슬: 킥오프 + 후반 시작 / 종료 휘슬: 전반 종료 + 경기 종료
+  check(audio.clips['whistle-start'] === 2, `시작 휘슬 2번 (킥오프·후반 시작) → ${audio.clips['whistle-start']}번`);
+  check(audio.clips['whistle-end'] === 2, `종료 휘슬 2번 (전반·경기 종료) → ${audio.clips['whistle-end']}번`);
+  check(audio.clips['crowd-goal'] === goals || (goals === 0 && !audio.clips['crowd-goal']), `골 함성 = 골 수 (${goals}골 → ${audio.clips['crowd-goal'] ?? 0}번)`);
+  check(audio.count('shot-') >= goals, `골·슈팅마다 슈팅음 (${audio.count('shot-')}번)`);
+  check(audio.count('dribble-') + audio.count('kick-') + (audio.clips['whistle-foul'] ?? 0) > 0, `경기 중 드리블·킥·파울 소리 (${JSON.stringify(audio.clips)})`);
+  check(audio.synth === 0, '음원 파일을 불러왔으므로 합성음은 쓰지 않음');
   check(audio.speech.some((t) => t.startsWith('킥오프')), '킥오프 해설');
   check(audio.speech.some((t) => t.includes('경기 종료') && /\d 대 \d/.test(t)), '경기 종료 해설 + 최종 점수');
   check(goals === 0 || audio.speech.filter((t) => t.includes('골')).length >= goals, '골마다 골 해설');
@@ -147,11 +164,11 @@ async function playFullMatch(page) {
   await page.getByRole('button', { name: '⚽ 경기 시작' }).click();
   await page.getByTestId('sound-toggle').click();
   check((await page.getByTestId('sound-toggle').innerText()).includes('소리 끔'), '경기 화면 빠른 음소거');
-  const before = await page.evaluate(() => window.__audio.whistles + window.__audio.speech.length);
+  const before = await page.evaluate(() => Object.values(window.__audio.clips).reduce((a, b) => a + b, 0) + window.__audio.speech.length);
   await page.getByTestId('kickoff').click();
   await page.waitForTimeout(400);
-  const after = await page.evaluate(() => window.__audio.whistles + window.__audio.speech.length);
-  check(after === before, '음소거 상태에서는 휘슬·해설 없음');
+  const after = await page.evaluate(() => Object.values(window.__audio.clips).reduce((a, b) => a + b, 0) + window.__audio.speech.length);
+  check(after === before, '음소거 상태에서는 효과음·해설 없음');
   await page.close();
 }
 
