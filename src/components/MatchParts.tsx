@@ -217,9 +217,11 @@ export function HalfSummaryCard({ summary, sides }: { summary: HalfSummary; side
 interface TacticsProps {
   sides: { home: MatchSide; away: MatchSide };
   onUpdate(side: Side, next: MatchSide, log?: string): void;
+  /** 킥오프 전: 교체가 아니라 자유롭게 선발을 바꾸는 단계 */
+  beforeKickoff?: boolean;
 }
 
-export function TacticsPanel({ sides, onUpdate }: TacticsProps) {
+export function TacticsPanel({ sides, onUpdate, beforeKickoff = false }: TacticsProps) {
   const [tab, setTab] = useState<Side>('home');
   const [message, setMessage] = useState<string | null>(null);
   const ms = sides[tab];
@@ -232,7 +234,7 @@ export function TacticsPanel({ sides, onUpdate }: TacticsProps) {
         {(['home', 'away'] as Side[]).map((s) => (
           <button key={s} className={tab === s ? 'on' : ''} onClick={() => { setTab(s); setMessage(null); }}>
             {sides[s].team.emoji} {sides[s].team.name}
-            <small> · 교체 {MAX_SUBS - sides[s].subsUsed}회 남음</small>
+            <small>{beforeKickoff ? ' · 선발 정하기' : ` · 교체 ${MAX_SUBS - sides[s].subsUsed}회 남음`}</small>
           </button>
         ))}
       </div>
@@ -256,11 +258,11 @@ export function TacticsPanel({ sides, onUpdate }: TacticsProps) {
         color={ms.team.color}
         unavailable={ms.unavailable}
         injured={ms.injured}
-        benchTitle="벤치 (끌어서 교체)"
+        benchTitle={beforeKickoff ? '벤치' : '벤치 (끌어서 교체)'}
         onResetPositions={() => onUpdate(tab, { ...ms, lineup: { ...ms.lineup, positions: undefined } })}
         onDrop={(pid, target) => {
           const result = applyDrop(ms.lineup, pid, target, {
-            matchMode: true,
+            matchMode: !beforeKickoff,
             subsLeft: MAX_SUBS - ms.subsUsed,
             maxOnPitch,
             unavailable: ms.unavailable,

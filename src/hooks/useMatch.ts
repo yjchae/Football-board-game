@@ -44,7 +44,7 @@ export interface MatchState {
   notice?: string;
 }
 
-type Action =
+export type Action =
   | { type: 'KICKOFF' }
   | { type: 'FETCH_START' }
   | { type: 'FETCH_DONE'; result: SegmentResult }
@@ -56,7 +56,7 @@ type Action =
   | { type: 'CLEAR_SPOTLIGHT' }
   | { type: 'NOTICE'; text?: string };
 
-function init(teams: { home: Team; away: Team }): MatchState {
+export function init(teams: { home: Team; away: Team }): MatchState {
   return {
     phase: 'ready',
     segIndex: 0,
@@ -110,9 +110,11 @@ function buildHalfSummary(state: MatchState): HalfSummary {
   };
 }
 
-function reducer(state: MatchState, action: Action): MatchState {
+export function reducer(state: MatchState, action: Action): MatchState {
   switch (action.type) {
     case 'KICKOFF': {
+      // 킥오프는 경기 전/하프타임에만 (버튼 연타로 경기가 처음으로 돌아가는 것 방지)
+      if (state.phase !== 'ready' && state.phase !== 'halftime') return state;
       const segIndex = state.phase === 'halftime' ? 3 : 0;
       const minute = SEGMENTS[segIndex].start;
       const info: MatchEvent = {
@@ -171,9 +173,14 @@ function reducer(state: MatchState, action: Action): MatchState {
           events: [...state.events, whistle],
         };
       }
-      // 부상 선수가 경기장에 남아 있으면 자동으로 작전 타임
-      const needsSub = (['home', 'away'] as Side[]).some((s) =>
-        state[s].injured.some((id) => Object.values(state[s].lineup.slots).includes(id)),
+      // 이번 구간에 새로 다친 선수가 경기장에 남아 있으면 자동으로 작전 타임 (한 번만 알림)
+      const needsSub = state.events.some(
+        (e) =>
+          e.type === 'injury' &&
+          e.side &&
+          e.minute > seg.start &&
+          e.minute <= seg.end &&
+          Object.values(state[e.side].lineup.slots).includes(e.playerId ?? null),
       );
       return {
         ...atEnd,
@@ -187,6 +194,7 @@ function reducer(state: MatchState, action: Action): MatchState {
     case 'REQUEST_TIMEOUT':
       return { ...state, timeoutRequested: true };
     case 'RESUME':
+      if (state.phase !== 'timeout') return state;
       return { ...state, phase: 'playing', notice: undefined };
     case 'UPDATE_SIDE': {
       const events = action.log

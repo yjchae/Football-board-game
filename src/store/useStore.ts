@@ -5,9 +5,10 @@ import { lineupFromPhoto } from '../domain/positions';
 import type { AiSettings, Lineup, Player, Point, Team } from '../domain/types';
 import { uid } from '../utils/id';
 import { createDemoTeams } from './demoTeams';
+import { appStorage } from './storage';
 
 // ─────────────────────────────────────────────
-// 앱 전역 상태 (팀/선수/AI 설정) — 브라우저 localStorage에 자동 저장
+// 앱 전역 상태 (팀/선수/AI 설정) — 이 기기 브라우저에 자동 저장 (store/storage.ts)
 // ─────────────────────────────────────────────
 
 /** 선수를 여러 명 추가할 때 선발을 어떻게 세울지 */
@@ -131,7 +132,8 @@ export const useStore = create<State>()(
     }),
     {
       name: 'card-football-v1',
-      storage: createJSONStorage(() => localStorage),
+      // 카드 사진이 커서 IndexedDB에 저장 (예전 localStorage 데이터는 자동 이전)
+      storage: createJSONStorage(() => appStorage),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<State>;
         return { ...current, ...p, settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) } };

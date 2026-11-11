@@ -144,7 +144,7 @@ function LiveMatch({ home, away, onExit }: { home: Team; away: Team; onExit(): v
       {/* 단계별 메인 영역 */}
       {state.phase === 'ready' && (
         <div className="stage">
-          <TacticsPanel sides={sides} onUpdate={(s, next) => updateSide(s, next)} />
+          <TacticsPanel sides={sides} beforeKickoff onUpdate={(s, next) => updateSide(s, next)} />
           <button className="btn btn--primary btn--xl btn--float" onClick={kickoff}>🎉 킥오프!</button>
         </div>
       )}
