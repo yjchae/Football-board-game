@@ -61,4 +61,10 @@ describe('경기 진행 상태 머신', () => {
     expect(s.summaries).toHaveLength(2);
     expect(SEGMENTS[s.segIndex]).toBeDefined();
   });
+  it('R3 선수 정보 없는 부상 이벤트 + 빈자리(퇴장)로 엉뚱한 작전 타임이 걸리지 않음', () => {
+    let s = reducer(start(), { type: 'KICKOFF' });
+    const pid = s.home.lineup.slots.mf1!;
+    s = playSegment(s, [ev({ type: 'red', playerId: pid, minute: 2 }), ev({ type: 'injury', playerId: undefined, minute: 8 })]);
+    expect(s.phase).toBe('playing');
+  });
 });

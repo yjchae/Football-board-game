@@ -178,9 +178,10 @@ export function reducer(state: MatchState, action: Action): MatchState {
         (e) =>
           e.type === 'injury' &&
           e.side &&
+          e.playerId &&
           e.minute > seg.start &&
           e.minute <= seg.end &&
-          Object.values(state[e.side].lineup.slots).includes(e.playerId ?? null),
+          Object.values(state[e.side].lineup.slots).includes(e.playerId),
       );
       return {
         ...atEnd,
