@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { soundFor } from '../audio/narration';
-import { isNarrating, narrate, stopNarration } from '../audio/narrator';
+import { configureNarrator, isNarrating, narrate, stopNarration } from '../audio/narrator';
 import { playSfx } from '../audio/sfx';
 import { scoreOf } from '../domain/match';
 import type { MatchEvent } from '../domain/types';
@@ -15,10 +15,15 @@ interface Options {
   awayName: string;
   sfx: boolean;
   voice: boolean;
+  /** AI 남자 목소리에 쓸 제미나이 키 (null이면 기기 목소리) */
+  voiceKey: string | null;
 }
 
-export function useMatchAudio({ events, homeName, awayName, sfx, voice }: Options) {
+export function useMatchAudio({ events, homeName, awayName, sfx, voice, voiceKey }: Options) {
   const played = useRef(events.length);
+
+  // 이벤트보다 먼저 목소리 설정을 반영해야 첫 해설부터 AI 목소리로 읽는다
+  configureNarrator(voiceKey);
 
   useEffect(() => {
     const fresh = events.slice(played.current);

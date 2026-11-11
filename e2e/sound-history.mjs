@@ -24,7 +24,7 @@ const errors = [];
  *  - sfx/*.mp3 요청은 "파일 이름"만 담은 가짜 응답으로 바꾸고, 디코딩 결과에 그 이름을 붙여 둔다
  */
 function fakeAudio() {
-  const log = { clips: {}, synth: 0, speech: [] };
+  const log = { clips: {}, synth: 0, speech: [], voice: 0 };
   window.__audio = log;
   const realFetch = window.fetch.bind(window);
   window.fetch = (url, init) => {
@@ -46,13 +46,18 @@ function fakeAudio() {
       o.start = () => { log.synth += 1; };
       return o;
     }
-    createBuffer(_c, len) { return { getChannelData: () => new Float32Array(len) }; }
+    createBuffer(_c, len, rate) {
+      const data = new Float32Array(len);
+      return { length: len, duration: len / (rate || 8000), getChannelData: () => data };
+    }
     decodeAudioData(data) { return Promise.resolve({ clip: new TextDecoder().decode(data) }); }
     createBufferSource() {
       const s = node();
       s.start = () => {
         const name = s.buffer?.clip;
         if (name) log.clips[name] = (log.clips[name] ?? 0) + 1;
+        else if (s.buffer?.length > 1) log.voice += 1; // AI 해설 목소리 (무음 1샘플은 제외)
+        setTimeout(() => s.onended?.(), 50);
       };
       return s;
     }
@@ -71,7 +76,8 @@ function fakeAudio() {
 async function newPage(settings = {}) {
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 1400 } })).newPage();
   page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  // 사용량 초과(429)는 테스트에서 일부러 낸 오류라 제외
+  page.on('console', (m) => m.type() === 'error' && !/status of 429/.test(m.text()) && errors.push(m.text()));
   page.on('dialog', (d) => d.accept());
   await page.addInitScript(fakeAudio);
   await page.addInitScript((s) => {
@@ -216,6 +222,47 @@ async function playFullMatch(page) {
   const feed = await page.getByTestId('feed').locator('li').count();
   // 재생 간격 40ms라도, 킥오프 해설(1.5초)이 끝나기 전에는 다음 장면이 나오지 않아야 한다
   check(feed <= 2, `해설 중에는 장면 대기 (1초 동안 공개된 장면 ${feed}개)`);
+  await page.close();
+}
+
+// ─────────────── 6) AI 남자 목소리 (제미나이 음성 합성) ───────────────
+{
+  // 0.1초짜리 무음 PCM(24kHz, 16비트)을 담은 가짜 제미나이 음성 응답
+  const pcm = Buffer.alloc(4800).toString('base64');
+  const ttsBody = JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;rate=24000', data: pcm } }] } }] });
+
+  const page = await newPage({ geminiKey: 'test-key' });
+  const voices = [];
+  await page.route('**/generativelanguage.googleapis.com/**', (route) => {
+    voices.push(route.request().postDataJSON()?.generationConfig?.speechConfig?.voiceConfig?.prebuiltVoiceConfig?.voiceName);
+    route.fulfill({ status: 200, contentType: 'application/json', body: ttsBody });
+  });
+  await page.getByRole('button', { name: /AI 설정/ }).click();
+  check((await page.getByTestId('toggle-ai-voice').getAttribute('aria-checked')) === 'true', 'AI 남자 목소리 기본 켜짐');
+  await page.getByTestId('voice-test').click();
+  await page.waitForTimeout(1500);
+  check(voices[0] === 'Fenrir', `제미나이에 남자 목소리(Fenrir) 요청 (${voices[0]})`);
+  check((await page.evaluate(() => window.__audio.voice)) >= 1, 'AI 목소리 음성 재생');
+  check((await page.evaluate(() => window.__audio.speech.length)) === 0, 'AI 목소리가 되면 기기 목소리는 안 씀');
+
+  // AI 목소리 끄기 → 기기 목소리
+  await page.getByTestId('toggle-ai-voice').click();
+  const before = voices.length;
+  await page.getByTestId('voice-test').click();
+  await page.waitForTimeout(500);
+  check(voices.length === before && (await page.evaluate(() => window.__audio.speech.length)) === 1, 'AI 목소리 끄면 기기 목소리로 읽음');
+  await page.close();
+}
+{
+  // 사용량 초과 → 기기 목소리로 대신 읽는다
+  const page = await newPage({ geminiKey: 'test-key' });
+  await page.route('**/generativelanguage.googleapis.com/**', (route) =>
+    route.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: 'quota' } }) }),
+  );
+  await page.getByRole('button', { name: /AI 설정/ }).click();
+  await page.getByTestId('voice-test').click();
+  await page.waitForTimeout(1500);
+  check((await page.evaluate(() => window.__audio.speech.length)) === 1, 'AI 목소리 실패 시 기기 목소리로 대신 읽음');
   await page.close();
 }
 

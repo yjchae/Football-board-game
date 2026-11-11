@@ -128,7 +128,14 @@ function LiveMatch({ matchId, home, away, onExit }: { matchId: string; home: Tea
     if (settings.sfx) void preloadSfx();
   }, [settings.sfx]);
   useEffect(() => releaseSfx, []);
-  useMatchAudio({ events: state.events, homeName: home.name, awayName: away.name, sfx: settings.sfx, voice: settings.voice });
+  useMatchAudio({
+    events: state.events,
+    homeName: home.name,
+    awayName: away.name,
+    sfx: settings.sfx,
+    voice: settings.voice,
+    voiceKey: settings.aiVoice ? settings.geminiKey : null,
+  });
   const soundOn = settings.sfx || settings.voice;
   const toggleSound = () => updateSettings(soundOn ? { sfx: false, voice: false } : { sfx: true, voice: true });
 

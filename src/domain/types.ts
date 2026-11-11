@@ -142,6 +142,8 @@ export interface AiSettings {
   sfx: boolean;
   /** 음성 해설 (브라우저 음성 합성) */
   voice: boolean;
+  /** 음성 해설을 제미나이 AI 남자 목소리로 (제미나이 키 필요, 없으면 기기 목소리) */
+  aiVoice: boolean;
 }
 
 // ─────────────── 경기 기록 ───────────────

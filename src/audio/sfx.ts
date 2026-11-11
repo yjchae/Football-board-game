@@ -68,7 +68,8 @@ type AudioCtor = typeof AudioContext;
 
 let ctx: AudioContext | null = null;
 
-function getContext(): AudioContext | null {
+/** 효과음·AI 해설 목소리가 함께 쓰는 오디오 (아이폰 무음 모드 대응도 같이 받는다) */
+export function getContext(): AudioContext | null {
   if (ctx) return ctx;
   const Ctor: AudioCtor | undefined =
     typeof window === 'undefined'
@@ -126,7 +127,7 @@ export function preloadSfx(): Promise<boolean> {
 //      → 화면을 다시 터치하거나 돌아올 때마다, 그리고 재생 직전마다 다시 깨운다
 
 /** 멈춰 있으면 다시 깨운다. 깨우기가 끝나거나 잠깐 기다려도 안 되면 진행 */
-function wakeUp(ac: AudioContext): Promise<void> {
+export function wakeUp(ac: AudioContext): Promise<void> {
   if (ac.state === 'running') return Promise.resolve();
   const resumed = ac.resume().catch(() => undefined);
   const giveUp = new Promise<void>((done) => setTimeout(done, 300));
