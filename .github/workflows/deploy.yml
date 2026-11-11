@@ -1,9 +1,9 @@
-# main 브랜치에 올리면 GitHub Pages로 자동 배포 (Settings → Pages → Source: GitHub Actions)
+# 기본(default) 브랜치에 올리면 GitHub Pages로 자동 배포
+# 처음 한 번: 저장소 Settings → Pages → Source 를 "GitHub Actions" 로 선택
 name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -17,6 +17,8 @@ concurrency:
 
 jobs:
   build:
+    # 기본 브랜치일 때만 배포 (다른 브랜치 push 는 무시)
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +29,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
