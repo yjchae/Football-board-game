@@ -165,7 +165,7 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
 .pcard__ovr { display: flex; flex-direction: column; font-family: var(--font-num); line-height: 1; }
 .pcard__ovr strong { font-size: 2rem; }
 .pcard__ovr span { font-size: 0.85rem; font-weight: 700; }
-.pcard__name { font-family: var(--font-display); font-size: 1.15rem; margin: 10px 0 8px; border-bottom: 1px solid rgba(0, 0, 0, 0.2); padding-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcard__name { font-family: var(--font-display); font-size: 1.15rem; line-height: 1.2; margin: 10px 0 8px; border-bottom: 1px solid rgba(0, 0, 0, 0.2); padding-bottom: 6px; word-break: keep-all; overflow-wrap: anywhere; }
 .pcard__num { font-family: var(--font-num); font-size: 0.85rem; opacity: 0.7; }
 .pcard__stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 6px; }
 .pcard__stats li { display: flex; flex-direction: column; align-items: center; font-size: 0.68rem; }
@@ -177,7 +177,7 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
 
 /* ─────────── 포지션 보드 ─────────── */
 .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
-.board { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 16px; }
+.board { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 16px; align-items: stretch; }
 .pitch {
   position: relative; aspect-ratio: 100 / 130; max-height: 78vh; width: 100%; border-radius: 20px; overflow: hidden;
   background: repeating-linear-gradient(180deg, #1c6b3a 0 10%, #1a6236 10% 20%);
@@ -199,16 +199,32 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
 .chip .avatar { border: 3px solid var(--team, var(--accent)); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4); background: var(--bg-2); }
 .chip__ovr { position: absolute; top: -6px; right: 10px; background: var(--accent); color: var(--accent-ink); font-family: var(--font-num); font-size: 0.65rem; font-weight: 700; padding: 1px 5px; border-radius: 6px; }
 .chip__badge { position: absolute; top: -8px; left: 8px; font-size: 0.9rem; }
-.chip__name { font-size: 0.72rem; font-weight: 700; background: rgba(0, 0, 0, 0.6); padding: 2px 7px; border-radius: 6px; margin-top: 3px; max-width: 84px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 이름은 줄이지(…) 않고 전부 보여준다: 길면 줄바꿈 */
+.chip__name {
+  font-size: 0.72rem; font-weight: 700; line-height: 1.2; text-align: center;
+  background: rgba(0, 0, 0, 0.6); padding: 2px 6px; border-radius: 6px; margin-top: 3px;
+  max-width: 96px; white-space: normal; word-break: keep-all; overflow-wrap: anywhere;
+}
 .chip--selected .avatar { outline: 3px solid #fff; outline-offset: 2px; animation: pulse 0.9s ease-in-out infinite; }
 .chip--misfit .avatar { border-color: var(--warn); }
-.chip--dragging { z-index: 50; cursor: grabbing; opacity: 0.9; }
+.chip--dragging { opacity: 0.35; }
+.chip--overlay { cursor: grabbing; pointer-events: none; filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.45)); }
 .chip--disabled { opacity: 0.3; filter: grayscale(1); cursor: not-allowed; }
 
-.bench { background: var(--surface); border: 1.5px solid var(--line); border-radius: 20px; padding: 14px; transition: border-color 0.2s; min-height: 140px; }
-.bench h4 { font-family: var(--font-display); font-size: 1rem; margin-bottom: 12px; color: var(--muted); }
+/* 벤치: 경기장 높이에 맞추고, 후보가 많으면 목록만 따로 스크롤 → 경기장이 화면 밖으로 밀려나지 않는다 */
+.bench {
+  background: var(--surface); border: 1.5px solid var(--line); border-radius: 20px; padding: 14px;
+  transition: border-color 0.2s; min-height: 140px;
+  display: flex; flex-direction: column;
+  contain: size; /* 벤치 내용이 행 높이를 늘리지 않게 (높이는 경기장이 정함) */
+}
+.bench h4 { font-family: var(--font-display); font-size: 1rem; margin-bottom: 12px; color: var(--muted); flex: 0 0 auto; }
 .bench--over, .bench--target { border-color: var(--accent); border-style: dashed; }
-.bench__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 14px 6px; }
+.bench__list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 14px 6px; align-content: start;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 8px 2px 4px; /* 위쪽 능력치 배지가 잘리지 않게 */
+}
 .bench .chip { --team: #5b7a68; }
 .hint { color: var(--muted); font-size: 0.82rem; margin-top: 12px; }
 
@@ -253,7 +269,7 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
 .draft-card__ovr strong { font-size: 1.4rem; }
 .draft-card__ovr span { font-size: 0.72rem; font-weight: 700; }
 .draft-card__info { display: flex; flex-direction: column; min-width: 0; }
-.draft-card__info b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.draft-card__info b { word-break: keep-all; overflow-wrap: anywhere; }
 .draft-card__info small { opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .check { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; cursor: pointer; }
 .check input, .bulk-row > input[type='checkbox'] { width: 22px; height: 22px; accent-color: var(--accent); flex-shrink: 0; }
@@ -607,6 +623,8 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
   .team-list .btn { flex: 0 0 auto; width: auto; }
   .team-list .section-title { display: none; }
   .board { grid-template-columns: minmax(0, 1fr); }
+  /* 한 줄 배치: 벤치는 경기장 아래, 높이를 제한하고 그 안에서 스크롤 */
+  .bench { contain: none; max-height: 42vh; }
   .engine-tag { display: none; }
 }
 @media (max-width: 560px) {
@@ -615,7 +633,7 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
   .nav button { padding: 8px 10px; font-size: 0.85rem; }
   .slot { width: 64px; }
   .chip .avatar { width: 34px !important; height: 34px !important; }
-  .chip__name { font-size: 0.62rem; max-width: 64px; }
+  .chip__name { font-size: 0.62rem; max-width: 72px; padding: 2px 4px; }
   .scoreboard { top: 8px; padding: 12px; }
   .scoreboard__score { font-size: 2.2rem; }
   .tbadge { flex-direction: column; text-align: center; }
