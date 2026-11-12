@@ -1,5 +1,6 @@
 import {
   DndContext,
+  DragOverlay,
   pointerWithin,
   PointerSensor,
   TouchSensor,
@@ -9,8 +10,10 @@ import {
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core';
 import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { fitMultiplier } from '../domain/match';
 import type { DropTarget } from '../domain/lineupOps';
 import { resolveSlots, shapeName } from '../domain/positions';
@@ -40,6 +43,8 @@ interface Props {
 export function LineupBoard(props: Props) {
   const { players, lineup, color, onDrop, unavailable = [], injured = [], benchTitle = '벤치', onResetPositions } = props;
   const [selected, setSelected] = useState<string | null>(null);
+  /** 지금 끌고 있는 선수 (스크롤 영역 밖으로도 보이도록 오버레이로 그린다) */
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const pitchRef = useRef<HTMLDivElement | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -78,12 +83,14 @@ export function LineupBoard(props: Props) {
     const t = 'touches' in e ? e.touches[0] : e;
     if (t) lastPointer.current = { x: t.clientX, y: t.clientY };
   };
-  const startTracking = () => {
+  const startTracking = (event: DragStartEvent) => {
+    setDraggingId(String(event.active.id));
     lastPointer.current = null;
     window.addEventListener('pointermove', trackPointer);
     window.addEventListener('touchmove', trackPointer, { passive: true });
   };
   const stopTracking = () => {
+    setDraggingId(null);
     window.removeEventListener('pointermove', trackPointer);
     window.removeEventListener('touchmove', trackPointer);
   };
@@ -173,6 +180,16 @@ export function LineupBoard(props: Props) {
           ))}
         </BenchDrop>
       </div>
+      {createPortal(
+        <DragOverlay dropAnimation={null}>
+          {draggingId && byId.get(draggingId) && (
+            <div className="chip chip--overlay" style={{ '--team': onPitch.has(draggingId) ? color : '#5b7a68' } as React.CSSProperties}>
+              <ChipFace player={byId.get(draggingId)!} injured={injured.includes(draggingId)} />
+            </div>
+          )}
+        </DragOverlay>,
+        document.body,
+      )}
       <p className="hint">
         💡 선수를 <b>빈 잔디</b>에 놓으면 그 위치로 자유롭게 옮겨지고, <b>다른 선수</b> 위에 놓으면 자리를 바꿔요.
         선수를 누른 뒤 원하는 곳을 눌러도 돼요. 서 있는 위치에 따라 수비·미드·공격 역할이 정해지고, 주황 테두리는 원래 포지션과 다른 역할이에요.
@@ -248,8 +265,9 @@ interface ChipProps {
 }
 
 function Chip({ player, selected, disabled, injured, misfit, onTap }: ChipProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: player.id, disabled });
-  const style = transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : undefined;
+  // 끄는 동안 원래 자리는 흐리게 두고, 손가락을 따라다니는 모습은 DragOverlay가 그린다
+  // (벤치 목록이 스크롤 영역이라 직접 옮기면 영역 밖에서 잘리기 때문)
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: player.id, disabled });
   const cls = [
     'chip',
     selected && 'chip--selected',
@@ -264,7 +282,6 @@ function Chip({ player, selected, disabled, injured, misfit, onTap }: ChipProps)
     <div
       ref={setNodeRef}
       className={cls}
-      style={style}
       {...listeners}
       {...attributes}
       onClick={(e) => {
@@ -273,11 +290,20 @@ function Chip({ player, selected, disabled, injured, misfit, onTap }: ChipProps)
       }}
       data-testid={`chip-${player.name}`}
     >
+      <ChipFace player={player} injured={injured} />
+    </div>
+  );
+}
+
+/** 선수 칩의 겉모습 (보드 위 칩과 드래그 오버레이가 함께 쓴다) */
+function ChipFace({ player, injured }: { player: Player; injured?: boolean }) {
+  return (
+    <>
       <PlayerAvatar player={player} size={40} />
       <span className="chip__ovr">{player.overall}</span>
       {injured && <span className="chip__badge">🚑</span>}
       <span className="chip__name">{player.name}</span>
-    </div>
+    </>
   );
 }
 
