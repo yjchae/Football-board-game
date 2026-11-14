@@ -12,8 +12,8 @@
 /** 써 볼 음성 합성 모델 (앞에서부터 시도, 없는 모델이면 다음 것) */
 const TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts'];
 
-/** 제미나이 기본 목소리 중 남자 목소리 (힘 있고 들뜬 말투) */
-export const MALE_VOICE = 'Fenrir';
+/** 제미나이 기본 목소리 중 낮고 굵은 남자 목소리 (Algenib=거친 저음). 더 낮게/다르게: Charon, Orus, Alnilam */
+export const MALE_VOICE = 'Algenib';
 
 /** 음성을 받아 오는 데 이보다 오래 걸리면 포기하고 기기 목소리로 읽는다 */
 const TIMEOUT_MS = 8000;
@@ -27,8 +27,8 @@ const isMissingModel = (msg: string) => /not found|404|is not supported|does not
 
 async function requestPcm(apiKey: string, text: string, urgent: boolean): Promise<Uint8Array> {
   const { GoogleGenAI, Modality } = await import('@google/genai');
-  const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: TIMEOUT_MS } });
-  const style = urgent ? '흥분한 목소리로 크게 외치듯이' : '생생하고 힘 있게';
+  const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: TIMEOUT_MS, apiVersion: 'v1beta' } }); // 음성 설정(speechConfig)은 v1beta에서만 받는다
+  const style = urgent ? '낮고 굵은 중저음 남자 목소리로 흥분해서 크게 외치듯이' : '낮고 굵은 중저음 남자 목소리로 생생하고 힘 있게';
   const prompt = `한국 축구 중계 캐스터처럼 ${style} 읽어 주세요: ${text}`;
 
   const models = workingModel ? [workingModel] : TTS_MODELS;
