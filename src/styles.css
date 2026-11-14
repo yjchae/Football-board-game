@@ -27,6 +27,21 @@
 }
 
 * { box-sizing: border-box; }
+
+/* 경기 구장 평면도 */
+.livepitch { position: relative; width: 100%; aspect-ratio: 100 / 60; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+.livepitch__svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.livepitch__ball {
+  position: absolute; transform: translate(-50%, -50%); font-size: 20px; line-height: 1;
+  transition: left 0.9s ease-in-out, top 0.9s ease-in-out;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
+}
+.livepitch__label {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); max-width: 90%;
+  padding: 3px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; color: #fff;
+  background: color-mix(in srgb, var(--team, #000) 70%, #000); border: 1px solid rgba(255, 255, 255, 0.5);
+}
 html, body { margin: 0; }
 body {
   background:

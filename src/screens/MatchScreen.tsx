@@ -11,6 +11,7 @@ import {
   Spotlight,
   TacticsPanel,
 } from '../components/MatchParts';
+import { PitchView } from '../components/PitchView';
 import { confirmMissingTactics, TacticReveal, TacticsBoard } from '../components/TacticNotes';
 import { onPitchIds } from '../domain/formations';
 import { isLastSegmentOfHalf, scoreOf, SEGMENTS } from '../domain/match';
@@ -215,6 +216,7 @@ function LiveMatch({ matchId, home, away, onExit }: { matchId: string; home: Tea
                 ? '⏱️ 곧 하프 종료! 그때 교체할 수 있어요'
                 : '⏱️ 이번 구간이 끝나면 작전 타임!'}
           </button>
+          <PitchView events={state.events} sides={sides} />
           <EventFeed events={state.events} sides={sides} />
         </div>
       )}
