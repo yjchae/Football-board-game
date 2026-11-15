@@ -710,3 +710,41 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
   .history__date { grid-column: 1 / -1; }
   .history__result { grid-column: 1 / -1; text-align: center; }
 }
+
+/* 경기 화면: 세로는 위 경기장(작게)·아래 텍스트, 가로는 왼쪽 경기장·오른쪽 텍스트 */
+.playarea { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.playarea .livepitch { width: min(100%, 52vh); max-height: 30vh; margin: 0 auto; aspect-ratio: 100 / 60; }
+@media (orientation: portrait) {
+  .playarea .livepitch { width: min(100%, 50vh); max-height: 30vh; }
+}
+@media (orientation: landscape) {
+  .playarea { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; gap: 14px; }
+  .playarea .livepitch { width: min(100%, calc(max(100dvh - var(--live-chrome, 150px), 120px) * 100 / 60)); max-height: none; }
+  .playarea .feed { max-height: max(calc(100dvh - var(--live-chrome, 150px)), 120px); overflow-y: auto; }
+}
+/* 경기 중(body.is-playing) 가로 화면: 상단 크롬(헤더·스코어보드·상태줄·작전타임 버튼)을 줄이고 sticky를 풀어 경기장·피드에 높이를 준다 */
+@media (orientation: landscape) {
+  body.is-playing .app { padding-bottom: 12px; }
+  body.is-playing .install-banner { display: none; }
+  body.is-playing .topbar { position: static; padding: 6px 0; gap: 10px; }
+  body.is-playing .logo__ball { font-size: 1.3rem; }
+  body.is-playing .logo__text { font-size: 1.1rem; }
+  body.is-playing .nav button { padding: 5px 12px; }
+  body.is-playing .scoreboard { position: static; padding: 6px 16px; }
+  body.is-playing .scoreboard__score { font-size: 1.8rem; }
+  body.is-playing .scoreboard__clock { margin-top: 2px; }
+  body.is-playing .scoreboard__bar { margin-top: 4px; }
+  body.is-playing .live__status { margin: 6px 0; min-height: 0; }
+  body.is-playing .stage--play { gap: 6px; }
+  body.is-playing .stage--play > .btn { padding: 6px 12px; }
+  body.is-playing .playarea { --live-chrome: 300px; gap: 10px; }
+}
+/* 아주 낮은 가로 화면(폰): 상단 메뉴도 숨겨 경기장에 높이를 더 준다 ("경기 나가기"로 나갈 수 있음) */
+@media (orientation: landscape) and (max-height: 500px) {
+  body.is-playing .topbar { display: none; }
+  body.is-playing .live .btn--text { padding: 2px; min-height: 0; }
+  body.is-playing .scoreboard { padding: 4px 14px; }
+  body.is-playing .scoreboard__bar { display: none; }
+  body.is-playing .live__status { margin: 4px 0; }
+  body.is-playing .playarea { --live-chrome: 232px; }
+}

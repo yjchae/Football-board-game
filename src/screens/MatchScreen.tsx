@@ -129,6 +129,11 @@ function LiveMatch({ matchId, home, away, onExit }: { matchId: string; home: Tea
     if (settings.sfx) void preloadSfx();
   }, [settings.sfx]);
   useEffect(() => releaseSfx, []);
+  // 경기 중에만 가로 화면용 압축 레이아웃(body.is-playing)을 켠다
+  useEffect(() => {
+    document.body.classList.toggle('is-playing', state.phase === 'playing');
+    return () => document.body.classList.remove('is-playing');
+  }, [state.phase]);
   useMatchAudio({
     events: state.events,
     homeName: home.name,
@@ -216,8 +221,10 @@ function LiveMatch({ matchId, home, away, onExit }: { matchId: string; home: Tea
                 ? '⏱️ 곧 하프 종료! 그때 교체할 수 있어요'
                 : '⏱️ 이번 구간이 끝나면 작전 타임!'}
           </button>
-          <PitchView events={state.events} sides={sides} />
-          <EventFeed events={state.events} sides={sides} />
+          <div className="playarea">
+            <PitchView events={state.events} sides={sides} />
+            <EventFeed events={state.events} sides={sides} />
+          </div>
         </div>
       )}
 

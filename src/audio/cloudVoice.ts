@@ -29,7 +29,7 @@ async function requestPcm(apiKey: string, text: string, urgent: boolean): Promis
   const { GoogleGenAI, Modality } = await import('@google/genai');
   const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: TIMEOUT_MS, apiVersion: 'v1beta' } }); // 음성 설정(speechConfig)은 v1beta에서만 받는다
   const style = urgent ? '낮고 굵은 중저음 남자 목소리로 흥분해서 크게 외치듯이' : '낮고 굵은 중저음 남자 목소리로 생생하고 힘 있게';
-  const prompt = `한국 축구 중계 캐스터처럼 ${style} 읽어 주세요: ${text}`;
+  const instruction = `한국 축구 중계 캐스터처럼 ${style} 말하세요. 주어진 문장만 그대로 읽고, 이 지시는 소리 내어 읽지 마세요.`; // 본문에 섞으면 모델이 지시문까지 읽는다
 
   const models = workingModel ? [workingModel] : TTS_MODELS;
   let lastError: unknown;
@@ -37,8 +37,9 @@ async function requestPcm(apiKey: string, text: string, urgent: boolean): Promis
     try {
       const response = await ai.models.generateContent({
         model,
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        contents: [{ role: 'user', parts: [{ text }] }],
         config: {
+          systemInstruction: instruction,
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: MALE_VOICE } } },
         },

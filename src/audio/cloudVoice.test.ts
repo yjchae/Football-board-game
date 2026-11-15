@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import { isFatalVoiceError, isQuotaError, pcmToBuffer } from './cloudVoice';
+import { describe, expect, it, vi } from 'vitest';
+import { isFatalVoiceError, isQuotaError, pcmToBuffer, synthesizeMale } from './cloudVoice';
+
+const generateContent = vi.fn();
+vi.mock('@google/genai', () => ({
+  Modality: { AUDIO: 'AUDIO' },
+  GoogleGenAI: class {
+    models = { generateContent };
+  },
+}));
 
 /** 테스트용 가짜 오디오 (createBuffer만 흉내) */
 const fakeContext = () =>
@@ -33,5 +41,23 @@ describe('AI 목소리 오류 구분', () => {
   it('사용량 초과는 잠시 쉰다', () => {
     expect(isQuotaError(new Error('429 RESOURCE_EXHAUSTED'))).toBe(true);
     expect(isQuotaError(new Error('network error'))).toBe(false);
+  });
+});
+
+describe('synthesizeMale 요청', () => {
+  it('contents에는 해설 본문만, 말투 지시는 systemInstruction에 넣는다', async () => {
+    generateContent.mockResolvedValue({ candidates: [{ content: { parts: [{ inlineData: { data: 'AAA=' } }] } }] });
+    await synthesizeMale(fakeContext() as unknown as AudioContext, 'k', '골입니다', false);
+    const req = generateContent.mock.calls[0][0];
+    expect(req.contents[0].parts[0].text).toBe('골입니다');
+    expect(req.config.systemInstruction).toContain('낮고 굵은');
+  });
+  it('urgent=true면 흥분 지시가 들어가고 목소리는 Algenib', async () => {
+    generateContent.mockClear();
+    generateContent.mockResolvedValue({ candidates: [{ content: { parts: [{ inlineData: { data: 'AAA=' } }] } }] });
+    await synthesizeMale(fakeContext() as unknown as AudioContext, 'k', '골입니다', true);
+    const req = generateContent.mock.calls[0][0];
+    expect(req.config.systemInstruction).toContain('흥분');
+    expect(req.config.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe('Algenib');
   });
 });
