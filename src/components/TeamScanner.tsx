@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { canScanCards, scanTeamPhoto } from '../ai/engine';
 import { guessRole } from '../ai/parse';
 import { onPitchIds } from '../domain/formations';
+import { MAX_SQUAD } from '../domain/market';
 import { lineupFromPhoto, resolveSlots, shapeName } from '../domain/positions';
 import type { Player, Point, Role, Team } from '../domain/types';
 import { useStore, type Placement } from '../store/useStore';
@@ -50,6 +51,8 @@ export function TeamScanner({ team, onClose, onGoSettings }: { team: Team; onClo
   const cameraRef = useRef<HTMLInputElement>(null);
   const albumRef = useRef<HTMLInputElement>(null);
   const scanEnabled = canScanCards(settings);
+  /** 남은 자리: 이만큼까지만 체크할 수 있다 */
+  const room = Math.max(0, MAX_SQUAD - team.players.length);
 
   async function handleFiles(fileList: FileList | null) {
     const files = Array.from(fileList ?? []);
@@ -83,16 +86,20 @@ export function TeamScanner({ team, onClose, onGoSettings }: { team: Team; onClo
       setStep({ kind: 'scanning', done: i + 1, total: files.length });
     }
 
-    setRows((prev) => [...prev, ...found.map((r, i) => ({ ...r, key: prev.length + i }))]);
+    setRows((prev) => {
+      let left = room - prev.filter((r) => r.include).length;
+      return [...prev, ...found.map((r, i) => ({ ...r, include: r.include && left-- > 0, key: prev.length + i }))];
+    });
     setErrors(problems);
     setStep({ kind: 'review' });
   }
 
   const patchRow = (key: number, patch: Partial<Row['player']>) =>
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, player: { ...r.player, ...patch } } : r)));
-  const toggleRow = (key: number) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, include: !r.include } : r)));
   const selected = rows.filter((r) => r.include && r.player.name.trim());
-  const allOn = rows.length > 0 && rows.every((r) => r.include);
+  const full = rows.filter((r) => r.include).length >= room;
+  const toggleRow = (key: number) => setRows((rs) => rs.map((r) => (r.key === key && (r.include || !full) ? { ...r, include: !r.include } : r)));
+  const allOn = rows.length > 0 && rows.filter((r) => r.include).length === Math.min(rows.length, room);
 
   // ── 사진 속 배치를 쓸 수 있는지: 한 장의 사진에서, 위치를 아는 카드가 충분할 때
   const photoNos = new Set(selected.map((r) => r.photoNo));
@@ -173,10 +180,10 @@ export function TeamScanner({ team, onClose, onGoSettings }: { team: Team; onClo
             {errors.map((e) => <p key={e} className="status status--error">{e}</p>)}
             <div className="bulk-head">
               <label className="check">
-                <input type="checkbox" checked={allOn} onChange={() => setRows((rs) => rs.map((r) => ({ ...r, include: !allOn })))} />
+                <input type="checkbox" checked={allOn} onChange={() => setRows((rs) => rs.map((r, i) => ({ ...r, include: !allOn && i < room })))} />
                 전체 선택
               </label>
-              <span className="muted small">찾은 카드 {rows.length}장 · 추가할 선수 {selected.length}명</span>
+              <span className="muted small">찾은 카드 {rows.length}장 · {selected.length}/{room}명 선택</span>
               <span className="spacer" />
               <button className="btn btn--ghost" onClick={() => albumRef.current?.click()}>＋ 사진 더 추가</button>
             </div>
@@ -209,7 +216,7 @@ export function TeamScanner({ team, onClose, onGoSettings }: { team: Team; onClo
             <ul className="bulk-list" data-testid="bulk-list">
               {rows.map((r) => (
                 <li key={r.key} className={`bulk-row ${r.include ? '' : 'bulk-row--off'}`}>
-                  <input type="checkbox" checked={r.include} onChange={() => toggleRow(r.key)} aria-label={`${r.player.name} 추가`} />
+                  <input type="checkbox" checked={r.include} disabled={!r.include && full} onChange={() => toggleRow(r.key)} aria-label={`${r.player.name} 추가`} />
                   <div className={`bulk-row__thumb pcard--${tierOf(r.player.overall)}`}>
                     {r.player.photo ? <img src={r.player.photo} alt="" /> : <span>{r.player.overall}</span>}
                   </div>

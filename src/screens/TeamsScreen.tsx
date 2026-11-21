@@ -1,11 +1,14 @@
 import { useState } from 'react';
+import { FormationPicker } from '../components/FormationPicker';
 import { LineupBoard } from '../components/LineupBoard';
 import { PlayerCard } from '../components/PlayerCard';
 import { PlayerEditor } from '../components/PlayerEditor';
 import { RandomDraft } from '../components/RandomDraft';
 import { TeamScanner } from '../components/TeamScanner';
-import { FORMATIONS, onPitchIds } from '../domain/formations';
+import { TransferMarket } from '../components/TransferMarket';
+import { onPitchIds } from '../domain/formations';
 import { applyDrop } from '../domain/lineupOps';
+import { MAX_SQUAD } from '../domain/market';
 import type { Player, Team } from '../domain/types';
 import { TEAM_COLORS, TEAM_EMOJIS, useStore } from '../store/useStore';
 
@@ -33,7 +36,7 @@ export function TeamsScreen() {
           >
             <span className="team-pill__emoji">{t.emoji}</span>
             <span className="team-pill__name">{t.name}</span>
-            <span className="team-pill__count">{t.players.length}명</span>
+            <span className="team-pill__count">{t.players.length}/{MAX_SQUAD}</span>
           </button>
         ))}
         <button className="btn btn--primary btn--block" onClick={() => setCreating(true)}>＋ 새 팀 만들기</button>
@@ -117,7 +120,10 @@ function TeamDetail({ team }: { team: Team }) {
   const [editing, setEditing] = useState<Player | 'new' | null>(null);
   const [bulkScan, setBulkScan] = useState(false);
   const [randomDraft, setRandomDraft] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [market, setMarket] = useState(false);
+  const [message, setMessage] = useState<{ text: string } | null>(null);
+  const randomEnabled = useStore((s) => s.settings.randomDraft);
+  const full = team.players.length >= MAX_SQUAD;
   const starters = onPitchIds(team.lineup).length;
 
   return (
@@ -141,44 +147,51 @@ function TeamDetail({ team }: { team: Team }) {
       </div>
 
       {tab === 'roster' ? (
+        <>
+        {full && (
+          <p className="status status--warn" role="status" data-testid="squad-full">
+            선수가 {MAX_SQUAD}명이에요. 이적시장에서 교환하거나 선수를 정리해 주세요
+          </p>
+        )}
         <div className="roster">
-          <button className="add-card" onClick={() => setEditing('new')}>
+          <button className="add-card" disabled={full} onClick={() => setEditing('new')}>
             <span>＋</span>
             카드 1장 찍어서<br />선수 등록
           </button>
-          <button className="add-card add-card--team" onClick={() => setBulkScan(true)}>
+          <button className="add-card add-card--team" disabled={full} onClick={() => setBulkScan(true)}>
             <span>🃏🃏🃏</span>
             여러 장 한 번에 찍어서<br />팀 등록
           </button>
-          <button className="add-card add-card--random" onClick={() => setRandomDraft(true)}>
-            <span>🎲</span>
-            실존 선수<br />랜덤 뽑기
+          {randomEnabled && (
+            <button className="add-card add-card--random" disabled={full} onClick={() => setRandomDraft(true)}>
+              <span>🎲</span>
+              실존 선수<br />랜덤 뽑기
+            </button>
+          )}
+          <button className="add-card add-card--market" onClick={() => setMarket(true)} data-testid="open-market">
+            <span>🔁</span>
+            이적시장
           </button>
           {team.players.map((p) => (
             <PlayerCard key={p.id} player={p} onClick={() => setEditing(p)} />
           ))}
         </div>
+        </>
       ) : (
         <div className="lineup-tab">
           <div className="toolbar">
-            <div className="seg">
-              {FORMATIONS.map((f) => (
-                <button key={f.id} className={team.lineup.formationId === f.id ? 'on' : ''} onClick={() => setFormation(team.id, f.id)}>
-                  {f.name}
-                </button>
-              ))}
-            </div>
+            <FormationPicker value={team.lineup.formationId} onPick={(id) => setFormation(team.id, id)} />
             <button className="btn btn--ghost" onClick={() => autoArrange(team.id)}>✨ 자동 배치</button>
           </div>
-          {message && <p className="status status--error">{message}</p>}
           <LineupBoard
             players={team.players}
             lineup={team.lineup}
             color={team.color}
+            error={message}
             onResetPositions={() => setLineup(team.id, { ...team.lineup, positions: undefined })}
             onDrop={(pid, target) => {
-              const result = applyDrop(team.lineup, pid, target);
-              setMessage(result.error ?? null);
+              const result = applyDrop(team.lineup, pid, target, { matchMode: false, subsLeft: 99, maxOnPitch: 11, unavailable: [], players: team.players });
+              setMessage(result.error ? { text: result.error } : null);
               setLineup(team.id, result.lineup);
             }}
           />
@@ -186,7 +199,8 @@ function TeamDetail({ team }: { team: Team }) {
       )}
 
       {bulkScan && <TeamScanner team={team} onClose={() => setBulkScan(false)} />}
-      {randomDraft && <RandomDraft team={team} onClose={() => setRandomDraft(false)} />}
+      {randomEnabled && randomDraft && <RandomDraft team={team} onClose={() => setRandomDraft(false)} />}
+      {market && <TransferMarket team={team} onClose={() => setMarket(false)} />}
 
       {editing && (
         <PlayerEditor

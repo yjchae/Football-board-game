@@ -144,6 +144,8 @@ export interface AiSettings {
   voice: boolean;
   /** 음성 해설을 제미나이 AI 남자 목소리로 (제미나이 키 필요, 없으면 기기 목소리) */
   aiVoice: boolean;
+  /** 팀 화면에서 랜덤 선수 뽑기 카드를 보여줄지 */
+  randomDraft: boolean;
 }
 
 // ─────────────── 경기 기록 ───────────────

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { autoLineup, changeFormation, emptyLineup } from '../domain/formations';
+import { FORMATIONS, autoLineup, changeFormation, emptyLineup, parseFormationId } from '../domain/formations';
+import { MAX_SQUAD, swapInTeam } from '../domain/market';
 import { lineupFromPhoto } from '../domain/positions';
 import type { AiSettings, Lineup, MatchRecord, Player, Point, Team } from '../domain/types';
 import { uid } from '../utils/id';
@@ -27,6 +28,7 @@ export const DEFAULT_SETTINGS: AiSettings = {
   sfx: true,
   voice: true,
   aiVoice: true,
+  randomDraft: true,
 };
 
 /** 경기 기록은 최근 이만큼만 남긴다 */
@@ -37,6 +39,9 @@ export function pushRecord(history: MatchRecord[], record: MatchRecord): MatchRe
   return [record, ...history.filter((r) => r.id !== record.id)].slice(0, MAX_HISTORY);
 }
 
+/** 직접 만든 포메이션은 최근 이만큼만 남긴다 */
+export const MAX_CUSTOM_FORMATIONS = 8;
+
 export const TEAM_COLORS = ['#c6ff3d', '#ff5d73', '#4dd7ff', '#ffb547', '#b38cff', '#ffffff'];
 export const TEAM_EMOJIS = ['🦁', '🐯', '🦅', '🐉', '🦈', '🐺', '⚡', '🔥', '🌟', '🚀'];
 
@@ -45,20 +50,29 @@ interface State {
   settings: AiSettings;
   /** 최근 경기 기록 (최신이 맨 앞, 최대 MAX_HISTORY개) */
   history: MatchRecord[];
+  /** 직접 입력한 포메이션 id ("3-4-3" 형식, 오래된 것이 앞) */
+  customFormations: string[];
 
   addTeam(name: string, emoji: string, color: string): string;
   updateTeam(teamId: string, patch: Partial<Pick<Team, 'name' | 'emoji' | 'color'>>): void;
   removeTeam(teamId: string): void;
 
-  addPlayer(teamId: string, player: Omit<Player, 'id'>): void;
-  /** 여러 명 한 번에 추가 + 선발 배치 방법 */
-  addPlayers(teamId: string, players: Omit<Player, 'id'>[], placement: Placement): void;
+  /** 팀 최대 인원(MAX_SQUAD)까지만 추가. 실제로 추가된 수를 돌려준다 */
+  addPlayer(teamId: string, player: Omit<Player, 'id'>): number;
+  /** 여러 명 한 번에 추가 + 선발 배치 방법. 남은 자리만큼만 앞에서부터 추가하고 추가된 수를 돌려준다 */
+  addPlayers(teamId: string, players: Omit<Player, 'id'>[], placement: Placement): number;
+  /** 선수 교환: 들어온 선수가 나간 선수의 자리·등번호를 물려받는다. 나간 선수가 없으면 false */
+  swapPlayer(teamId: string, outId: string, incoming: Omit<Player, 'id'>): boolean;
   updatePlayer(teamId: string, player: Player): void;
   removePlayer(teamId: string, playerId: string): void;
 
   setLineup(teamId: string, lineup: Lineup): void;
   setFormation(teamId: string, formationId: string): void;
   autoArrange(teamId: string): void;
+
+  /** 규칙에 맞고 프리셋·중복이 아니면 추가(true), 9번째부터 가장 오래된 것 삭제 */
+  addCustomFormation(id: string): boolean;
+  removeCustomFormation(id: string): void;
 
   updateSettings(patch: Partial<AiSettings>): void;
   loadDemo(): void;
@@ -71,10 +85,11 @@ const mapTeam = (teams: Team[], id: string, fn: (t: Team) => Team) => teams.map(
 
 export const useStore = create<State>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       teams: [],
       settings: DEFAULT_SETTINGS,
       history: [],
+      customFormations: [],
 
       addTeam(name, emoji, color) {
         const id = uid('team-');
@@ -89,14 +104,15 @@ export const useStore = create<State>()(
       },
 
       addPlayer(teamId, player) {
-        set((s) => ({
-          teams: mapTeam(s.teams, teamId, (t) => ({ ...t, players: [...t.players, { ...player, id: uid('p-') }] })),
-        }));
+        return get().addPlayers(teamId, [player], { kind: 'none' });
       },
       addPlayers(teamId, players, placement) {
+        const team = get().teams.find((t) => t.id === teamId);
+        const room = team ? Math.max(0, MAX_SQUAD - team.players.length) : 0;
+        const added = players.slice(0, room).map((p) => ({ ...p, id: uid('p-') }));
+        if (added.length === 0) return 0;
         set((s) => ({
           teams: mapTeam(s.teams, teamId, (t) => {
-            const added = players.map((p) => ({ ...p, id: uid('p-') }));
             const all = [...t.players, ...added];
             const lineup =
               placement.kind === 'photo'
@@ -107,6 +123,14 @@ export const useStore = create<State>()(
             return { ...t, players: all, lineup };
           }),
         }));
+        return added.length;
+      },
+      swapPlayer(teamId, outId, incoming) {
+        const team = get().teams.find((t) => t.id === teamId);
+        const next = team && swapInTeam(team, outId, incoming, uid('p-'));
+        if (!next) return false;
+        set((s) => ({ teams: mapTeam(s.teams, teamId, () => next) }));
+        return true;
       },
       updatePlayer(teamId, player) {
         set((s) => ({
@@ -140,6 +164,16 @@ export const useStore = create<State>()(
         }));
       },
 
+      addCustomFormation(id) {
+        const list = get().customFormations;
+        if (!parseFormationId(id) || list.includes(id) || FORMATIONS.some((f) => f.id === id)) return false;
+        set({ customFormations: [...list, id].slice(-MAX_CUSTOM_FORMATIONS) });
+        return true;
+      },
+      removeCustomFormation(id) {
+        set((s) => ({ customFormations: s.customFormations.filter((f) => f !== id) }));
+      },
+
       updateSettings(patch) {
         set((s) => ({ settings: { ...s.settings, ...patch } }));
       },
@@ -165,6 +199,9 @@ export const useStore = create<State>()(
           ...p,
           settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) },
           history: Array.isArray(p.history) ? p.history.slice(0, MAX_HISTORY) : [],
+          customFormations: Array.isArray(p.customFormations)
+            ? p.customFormations.filter((f) => typeof f === 'string' && parseFormationId(f)).slice(-MAX_CUSTOM_FORMATIONS)
+            : [],
         };
       },
     },
