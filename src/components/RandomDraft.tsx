@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { LEAGUES, type LeagueId, type RealPlayer } from '../data/realPlayers';
+import { MAX_SQUAD } from '../domain/market';
 import { draftRandomPlayers, toGamePlayers, type SquadSize } from '../domain/randomSquad';
 import type { Role, Team } from '../domain/types';
 import { useStore } from '../store/useStore';
@@ -24,9 +25,11 @@ const leagueOf = (id: LeagueId) => LEAGUES.find((l) => l.id === id)!;
 export function RandomDraft({ team, onClose }: { team: Team; onClose(): void }) {
   const addPlayers = useStore((s) => s.addPlayers);
   const [leagues, setLeagues] = useState<LeagueId[]>(LEAGUES.map((l) => l.id));
-  const [size, setSize] = useState<SquadSize>(11);
+  /** 남은 자리: 이보다 큰 인원은 고를 수 없다 */
+  const room = Math.max(0, MAX_SQUAD - team.players.length);
+  const [size, setSize] = useState<SquadSize>(() => SIZES.map((s) => s.value).filter((v) => v <= room).pop() ?? 1);
   const [drafted, setDrafted] = useState<RealPlayer[] | null>(null);
-  const [autoPlace, setAutoPlace] = useState(true);
+  const [autoPlace, setAutoPlace] = useState(size !== 1);
 
   const excludeNames = useMemo(() => team.players.map((p) => p.name), [team.players]);
   const sorted = useMemo(
@@ -84,14 +87,16 @@ export function RandomDraft({ team, onClose }: { team: Team; onClose(): void }) 
           <span>몇 명 뽑을까요?</span>
           <div className="seg" role="radiogroup" aria-label="뽑을 인원">
             {SIZES.map((s) => (
-              <button key={s.value} className={size === s.value ? 'on' : ''} onClick={() => chooseSize(s.value)}>
+              <button key={s.value} className={size === s.value ? 'on' : ''} disabled={s.value > room} onClick={() => chooseSize(s.value)}>
                 {s.label}
               </button>
             ))}
           </div>
         </div>
 
-        <button className="btn btn--primary btn--block draft-roll" disabled={leagues.length === 0} onClick={draw} data-testid="draft-roll">
+        {room < 16 && <p className="muted small">팀에 {room}자리가 남아서 그보다 많이는 뽑을 수 없어요.</p>}
+
+        <button className="btn btn--primary btn--block draft-roll" disabled={leagues.length === 0 || size > room} onClick={draw} data-testid="draft-roll">
           {drafted ? '🔄 다시 뽑기' : '🎲 뽑기!'}
         </button>
         {leagues.length === 0 && <p className="muted small center">리그를 하나 이상 골라 주세요.</p>}

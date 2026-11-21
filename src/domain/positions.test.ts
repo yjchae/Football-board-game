@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDemoTeams } from '../store/demoTeams';
-import { onPitchIds } from './formations';
+import { getFormation, onPitchIds } from './formations';
 import { applyDrop } from './lineupOps';
 import { buildSideContext, createMatchSide } from './match';
 import { GK_SLOT, labelFor, lineupFromPhoto, photoToPitch, resolveSlots, roleFromY, shapeName } from './positions';
@@ -82,6 +82,67 @@ function players(n: number): Player[] {
   }));
 }
 
+describe('이동 규칙 R1~R4', () => {
+  it('R1 골키퍼가 이미 골문 끝(y=80)인데 더 위로 끌면 에러, 라인업 불변', () => {
+    const [team] = createDemoTeams();
+    const lineup = { ...team.lineup, positions: { gk: { x: 50, y: 80 } } };
+    const gk = lineup.slots[GK_SLOT]!;
+    const r = applyDrop(lineup, gk, { kind: 'point', point: { x: 50, y: 40 } });
+    expect(r.error).toBe('골키퍼는 골문 근처에서만 움직여요');
+    expect(r.lineup).toBe(lineup);
+  });
+
+  it('R1 필드 선수가 이미 수비 한계(y=78)인데 더 뒤로 끌면 에러', () => {
+    const [team] = createDemoTeams();
+    const lineup = { ...team.lineup, positions: { df1: { x: 20, y: 78 } } };
+    const r = applyDrop(lineup, lineup.slots.df1!, { kind: 'point', point: { x: 20, y: 95 } });
+    expect(r.error).toBe('수비 라인 뒤쪽까지만 갈 수 있어요');
+  });
+
+  const without = (slotId: string) => {
+    const [team] = createDemoTeams();
+    const lineup = { ...team.lineup, slots: { ...team.lineup.slots, [slotId]: null } };
+    return { team, lineup };
+  };
+
+  it('R2 gk만 비었는데 필드 선수를 빈 잔디에 놓으면 에러 (lineup 불변)', () => {
+    const { team, lineup } = without(GK_SLOT);
+    const bench = team.players.find((p) => !onPitchIds(team.lineup).includes(p.id) && p.role !== 'GK')!;
+    const r = applyDrop(lineup, bench.id, { kind: 'point', point: { x: 50, y: 50 } }, { ...MATCH, players: team.players });
+    expect(r.error).toContain('골키퍼 자리가 비었어요');
+    expect(r.lineup).toBe(lineup);
+  });
+
+  it('R3 필드 자리만 비었는데 골키퍼를 빈 잔디에 놓으면 에러, gk가 비었으면 gk 자리로', () => {
+    const { team, lineup } = without('mf1');
+    const gk2 = { ...team.players[0], id: 'gk2', role: 'GK' as const };
+    const players = [...team.players, gk2];
+    expect(applyDrop(lineup, 'gk2', { kind: 'point', point: { x: 50, y: 88 } }, { ...MATCH, players }).error).toBeTruthy();
+    const noGk = without(GK_SLOT).lineup;
+    const ok = applyDrop(noGk, 'gk2', { kind: 'point', point: { x: 50, y: 88 } }, { ...MATCH, players });
+    expect(ok.lineup.slots[GK_SLOT]).toBe('gk2');
+  });
+
+  it('R2 필드 선수는 gk가 아닌 빈 자리로 들어간다', () => {
+    const { team, lineup } = without('mf1');
+    const bench = team.players.find((p) => !onPitchIds(team.lineup).includes(p.id) && p.role !== 'GK')!;
+    const r = applyDrop(lineup, bench.id, { kind: 'point', point: { x: 40, y: 50 } }, { ...MATCH, players: team.players });
+    expect(r.lineup.slots.mf1).toBe(bench.id);
+  });
+
+  it('R4 선발 10명·교체 0이어도 빈 슬롯 채우기 가능 (교체 아님)', () => {
+    const { team, lineup } = without('mf1');
+    const bench = team.players.find((p) => !onPitchIds(team.lineup).includes(p.id))!;
+    const r = applyDrop(lineup, bench.id, { kind: 'slot', slotId: 'mf1' }, { ...MATCH, subsLeft: 0 });
+    expect(r.error).toBeUndefined();
+    expect(r.sub).toBeUndefined();
+    expect(r.lineup.slots.mf1).toBe(bench.id);
+    // 사람이 서 있는 자리는 여전히 교체 횟수 필요
+    const occupied = applyDrop(team.lineup, bench.id, { kind: 'slot', slotId: 'mf1' }, { ...MATCH, subsLeft: 0 });
+    expect(occupied.error).toBe('교체 횟수를 모두 사용했어요.');
+  });
+});
+
 describe('사진 속 카드 배치 → 포지션', () => {
   it('4-3-3으로 놓고 찍으면 4-3-3으로 선다', () => {
     const lineup = lineupFromPhoto(players(11), PHOTO_433, '4-4-2');
@@ -124,10 +185,49 @@ describe('사진 속 카드 배치 → 포지션', () => {
     expect(ids).not.toContain('p13');
   });
 
-  it('골키퍼 카드가 없으면 가장 아래 카드를 골키퍼로', () => {
+  it('골키퍼 카드가 없으면 gk 자리는 비우고 아래 카드도 필드 선수', () => {
     const ps = players(11).map((p) => ({ ...p, role: p.role === 'GK' ? ('DF' as const) : p.role }));
     const lineup = lineupFromPhoto(ps, PHOTO_433, '4-3-3');
-    expect(lineup.slots[GK_SLOT]).toBe('p0');
+    expect(lineup.slots[GK_SLOT]).toBeNull();
+    expect(onPitchIds(lineup)).toHaveLength(10);
+  });
+
+  it('골키퍼 2장이면 능력치 높은 1명만 gk, 나머지는 필드가 모자랄 때만', () => {
+    const ps = players(12).map((p, i) => (i === 11 ? { ...p, role: 'GK' as const, overall: 99 } : p));
+    const pts: Point[] = [...PHOTO_433, { x: 0.3, y: 0.95 }];
+    const lineup = lineupFromPhoto(ps, pts, '4-3-3');
+    expect(lineup.slots[GK_SLOT]).toBe('p11'); // OVR 99가 주전 GK
+    expect(onPitchIds(lineup)).not.toContain('p0');
+    // 필드 10명이 모자라면 남는 GK도 필드에 쓴다
+    const few = lineupFromPhoto(players(9), PHOTO_433.slice(0, 9), '4-3-3');
+    expect(onPitchIds(few)).toHaveLength(9);
+  });
+
+  it('3-4-3 사진 → formationId 3-4-3, 줄 모양 일치, 기본 위치로 바꿔도 역할 유지', () => {
+    const pts: Point[] = [
+      { x: 0.5, y: 0.92 },
+      { x: 0.25, y: 0.72 }, { x: 0.5, y: 0.74 }, { x: 0.75, y: 0.72 },
+      { x: 0.12, y: 0.5 }, { x: 0.38, y: 0.5 }, { x: 0.62, y: 0.5 }, { x: 0.88, y: 0.5 },
+      { x: 0.2, y: 0.2 }, { x: 0.5, y: 0.15 }, { x: 0.8, y: 0.2 },
+    ];
+    const lineup = lineupFromPhoto(players(11), pts, '4-4-2');
+    expect(lineup.formationId).toBe('3-4-3');
+    expect(shapeName(lineup)).toBe('3-4-3');
+    // 슬롯 기본 역할과 선 자리의 역할이 같다 (기본 위치 복귀 시 줄이 안 튄다)
+    for (const slot of getFormation(lineup.formationId).slots) {
+      if (!lineup.slots[slot.id]) continue;
+      expect(resolveSlots(lineup).find((s) => s.id === slot.id)!.role).toBe(slot.role);
+    }
+    // x 순서: 왼쪽 수비 카드(p1)가 df1
+    expect(lineup.slots.df1).toBe('p1');
+  });
+
+  it('8명 선발이면 모자란 줄은 빈 슬롯', () => {
+    const lineup = lineupFromPhoto(players(8), PHOTO_433.slice(0, 8), '4-4-2'); // GK + DF4 + MF3, 공격 0
+    expect(onPitchIds(lineup)).toHaveLength(8);
+    const empty = Object.keys(lineup.slots).filter((k) => !lineup.slots[k]);
+    expect(empty.every((k) => k.startsWith('fw') || k.startsWith('mf') || k.startsWith('m'))).toBe(true);
+    expect(empty).toHaveLength(3);
   });
 
   it('회전 결과는 경기장 범위 안', () => {

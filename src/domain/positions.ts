@@ -1,5 +1,6 @@
-import { FORMATIONS, getFormation } from './formations';
-import type { FormationSlot, Lineup, Player, Point, Role } from './types';
+import { FORMATIONS, buildFormation, emptyLineup, getFormation, labelFor } from './formations';
+export { labelFor };
+import type { Formation, FormationSlot, Lineup, Player, Point, Role } from './types';
 
 // ─────────────────────────────────────────────
 // 자유 위치 배치
@@ -16,22 +17,6 @@ export function roleFromY(y: number): Exclude<Role, 'GK'> {
   if (y >= 62) return 'DF';
   if (y >= 34) return 'MF';
   return 'FW';
-}
-
-/** 위치 → 세부 포지션 표기 */
-export function labelFor(role: Role, { x, y }: Point): string {
-  const side = x < 30 ? 'L' : x > 70 ? 'R' : 'C';
-  switch (role) {
-    case 'GK':
-      return 'GK';
-    case 'DF':
-      return side === 'C' ? 'CB' : `${side}B`;
-    case 'MF':
-      if (side !== 'C') return `${side}M`;
-      return y >= 52 ? 'CDM' : y <= 42 ? 'CAM' : 'CM';
-    case 'FW':
-      return side === 'C' ? 'ST' : `${side}W`;
-  }
 }
 
 /** 경기장 밖으로 나가지 않게, 골키퍼는 우리 골문 근처에만 */
@@ -65,6 +50,17 @@ export function movePosition(lineup: Lineup, slotId: string, point: Point): Line
     ...lineup,
     positions: { ...lineup.positions, [slotId]: clampPoint(point, slotId === GK_SLOT) },
   };
+}
+
+/** 이 이동이 clamp 때문에 사실상 제자리(3% 미만)가 되면 에러 문구, 아니면 null */
+export function blockedMoveError(lineup: Lineup, slotId: string, point: Point): string | null {
+  const isKeeper = slotId === GK_SLOT;
+  const from = lineup.positions?.[slotId] ?? getFormation(lineup.formationId).slots.find((s) => s.id === slotId);
+  if (!from) return null;
+  const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
+  const stuck = dist(clampPoint(point, isKeeper), from) < 3 && dist(point, from) >= 3;
+  if (!stuck) return null;
+  return isKeeper ? '골키퍼는 골문 근처에서만 움직여요' : '수비 라인 뒤쪽까지만 갈 수 있어요';
 }
 
 // ─────────────── 사진 속 카드 배치 → 라인업 ───────────────
@@ -107,45 +103,70 @@ export function photoToPitch(points: Point[], keeperIndex: number): Point[] {
   );
 }
 
+const LINES = ['DF', 'MF', 'FW'] as const;
+
+const lineCounts = (f: Formation) => LINES.map((r) => f.slots.filter((s) => s.role === r).length);
+
+/** 줄별 인원이 규칙에 맞으면 그 모양, 아니면 가장 가까운 프리셋 */
+function formationFor(want: number[]): Formation {
+  const sum = want.reduce((a, b) => a + b, 0);
+  if (sum === 10 && want.every((n) => n >= 1 && n <= 6)) return buildFormation(want);
+  const gap = (f: Formation) => lineCounts(f).reduce((a, n, i) => a + Math.abs(n - want[i]), 0);
+  return FORMATIONS.reduce((best, f) => (gap(f) < gap(best) ? f : best));
+}
+
 /**
  * 카드 배치대로 라인업 만들기.
  * players[i] 의 사진 속 위치가 points[i] (위치를 모르는 카드는 undefined).
- * 11명이 넘으면 골키퍼 + 능력치 높은 10명을 선발로 세운다.
+ * 골키퍼 카드가 없으면 gk 자리는 비우고, 골키퍼가 여럿이면 능력치 높은 1명만 gk, 나머지는 필드가 모자랄 때만 쓴다.
+ * 필드는 최대 10명 (능력치 높은 순). 줄(수비/미드/공격)별로 같은 역할 자리에 x 순서대로 세운다.
  */
 export function lineupFromPhoto(players: Player[], points: (Point | undefined)[], formationId: string): Lineup {
   const placed = players.map((p, i) => ({ player: p, point: points[i] })).filter((c): c is { player: Player; point: Point } => !!c.point);
+  const byOvr = (a: (typeof placed)[number], b: (typeof placed)[number]) => b.player.overall - a.player.overall;
 
-  const keeper = placed.filter((c) => c.player.role === 'GK').sort((a, b) => b.player.overall - a.player.overall)[0]
-    ?? placed.reduce<(typeof placed)[number] | undefined>((a, b) => (!a || b.point.y > a.point.y ? b : a), undefined);
-  const field = placed
-    .filter((c) => c !== keeper)
-    .sort((a, b) => b.player.overall - a.player.overall)
-    .slice(0, keeper ? 10 : 11);
+  const [keeper, ...extraKeepers] = placed.filter((c) => c.player.role === 'GK').sort(byOvr);
+  const field = [...placed.filter((c) => c.player.role !== 'GK').sort(byOvr), ...extraKeepers].slice(0, 10);
   const chosen = keeper ? [keeper, ...field] : field;
+  if (chosen.length === 0) return emptyLineup(formationId);
 
   const pitch = photoToPitch(chosen.map((c) => c.point), keeper ? 0 : -1);
+  const fieldOffset = keeper ? 1 : 0;
+  const entries = field.map((c, i) => ({ id: c.player.id, ovr: c.player.overall, pt: clampPoint(pitch[i + fieldOffset], false) }));
 
-  // 모양에 가장 가까운 기본 포메이션을 고른다 (버튼 표시용)
-  const fieldPoints = pitch.slice(keeper ? 1 : 0);
-  const want = { DF: 0, MF: 0, FW: 0 };
-  for (const p of fieldPoints) want[roleFromY(p.y)] += 1;
-  const formation =
-    FORMATIONS.find((f) => {
-      const c = { DF: 0, MF: 0, FW: 0 };
-      for (const s of f.slots) if (s.role !== 'GK') c[s.role] += 1;
-      return c.DF === want.DF && c.MF === want.MF && c.FW === want.FW;
-    }) ?? getFormation(formationId);
+  // 줄(y) → 역할별 묶음
+  const groups: Record<(typeof LINES)[number], typeof entries> = { DF: [], MF: [], FW: [] };
+  for (const e of entries) groups[roleFromY(e.pt.y) as (typeof LINES)[number]].push(e);
+  const formation = formationFor(LINES.map((r) => groups[r].length));
 
   const slots: Record<string, string | null> = {};
   for (const s of formation.slots) slots[s.id] = null;
   const positions: Record<string, Point> = {};
-  const fieldSlotIds = formation.slots.filter((s) => s.id !== GK_SLOT).map((s) => s.id);
+  const put = (slotId: string, e: { id: string; pt: Point }) => {
+    slots[slotId] = e.id;
+    positions[slotId] = e.pt;
+  };
 
-  chosen.forEach((c, i) => {
-    const slotId = keeper && i === 0 ? GK_SLOT : fieldSlotIds.shift();
-    if (!slotId) return;
-    slots[slotId] = c.player.id;
-    positions[slotId] = clampPoint(pitch[i], slotId === GK_SLOT);
-  });
+  if (keeper) put(GK_SLOT, { id: keeper.player.id, pt: clampPoint(pitch[0], true) });
+
+  const overflow: typeof entries = [];
+  for (const role of LINES) {
+    const roleSlots = formation.slots.filter((s) => s.role === role).sort((a, b) => a.x - b.x);
+    const group = [...groups[role]];
+    if (group.length > roleSlots.length) {
+      group.sort((a, b) => b.ovr - a.ovr);
+      overflow.push(...group.splice(roleSlots.length));
+    }
+    group.sort((a, b) => a.pt.x - b.pt.x);
+    // 모자라면 자리를 고르게 골라 나머지를 빈 슬롯으로 둔다
+    group.forEach((e, i) => {
+      const idx = group.length === 1 ? Math.floor((roleSlots.length - 1) / 2) : Math.round((i * (roleSlots.length - 1)) / (group.length - 1));
+      put(roleSlots[idx].id, e);
+    });
+  }
+  for (const e of overflow) {
+    const free = formation.slots.find((s) => s.id !== GK_SLOT && !slots[s.id]);
+    if (free) put(free.id, e);
+  }
   return { formationId: formation.id, slots, positions };
 }

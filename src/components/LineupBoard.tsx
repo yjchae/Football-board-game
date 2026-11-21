@@ -12,11 +12,11 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fitMultiplier } from '../domain/match';
 import type { DropTarget } from '../domain/lineupOps';
-import { resolveSlots, shapeName } from '../domain/positions';
+import { GK_SLOT, resolveSlots, shapeName } from '../domain/positions';
 import type { Lineup, Player, Point } from '../domain/types';
 import { PlayerAvatar } from './PlayerCard';
 
@@ -38,14 +38,23 @@ interface Props {
   benchTitle?: string;
   /** 옮긴 위치를 포메이션 기본 위치로 되돌리기 */
   onResetPositions?(): void;
+  /** 이동 실패 메시지. 보드 위에 3초 동안 겹쳐 보인다 (같은 문구라도 새 객체면 다시 보인다) */
+  error?: { text: string } | null;
 }
 
 export function LineupBoard(props: Props) {
-  const { players, lineup, color, onDrop, unavailable = [], injured = [], benchTitle = '벤치', onResetPositions } = props;
+  const { players, lineup, color, onDrop, unavailable = [], injured = [], benchTitle = '벤치', onResetPositions, error } = props;
   const [selected, setSelected] = useState<string | null>(null);
   /** 지금 끌고 있는 선수 (스크롤 영역 밖으로도 보이도록 오버레이로 그린다) */
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const pitchRef = useRef<HTMLDivElement | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    setToast(error?.text ?? null);
+    if (!error) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [error]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 8 } }),
@@ -56,6 +65,7 @@ export function LineupBoard(props: Props) {
   const byId = new Map(players.map((p) => [p.id, p]));
   const onPitch = new Set(Object.values(lineup.slots).filter(Boolean) as string[]);
   const bench = players.filter((p) => !onPitch.has(p.id));
+  const keeperOnBench = GK_SLOT in lineup.slots && !lineup.slots[GK_SLOT] && bench.some((p) => p.role === 'GK' && !unavailable.includes(p.id));
 
   const drop = (playerId: string, target: DropTarget) => {
     setSelected(null);
@@ -121,8 +131,11 @@ export function LineupBoard(props: Props) {
     if (!selected) return setSelected(id);
     if (selected === id) return setSelected(null);
     // 다른 선수를 눌렀다면 그 선수의 자리로 이동
-    const slotId = Object.keys(lineup.slots).find((k) => lineup.slots[k] === id);
-    if (slotId) drop(selected, { kind: 'slot', slotId });
+    const slotId = slotOf(id);
+    if (slotId) return drop(selected, { kind: 'slot', slotId });
+    // 경기장 선수를 고른 뒤 벤치 선수를 누르면, 벤치 선수가 그 선수의 자리에 들어간다
+    const selectedSlot = slotOf(selected);
+    if (selectedSlot) drop(id, { kind: 'slot', slotId: selectedSlot });
     else setSelected(id);
   };
   const tapSlot = (slotId: string) => selected && drop(selected, { kind: 'slot', slotId });
@@ -141,9 +154,11 @@ export function LineupBoard(props: Props) {
           <button className="btn btn--text btn--inline" onClick={onResetPositions}>↺ 기본 위치로</button>
         )}
       </div>
+      {keeperOnBench && <p className="status status--warn" data-testid="gk-empty">🧤 골키퍼 자리가 비었어요. 벤치의 골키퍼를 골문 자리에 놓아 주세요.</p>}
       <div className="board">
         <PitchDrop color={color} pitchRef={pitchRef} onTap={tapPitch} active={Boolean(selected)}>
           <PitchLines />
+          {toast && <p className="status status--error pitch__toast" role="alert">{toast}</p>}
           {slots.map((slot) => {
             const pid = lineup.slots[slot.id];
             const player = pid ? byId.get(pid) : undefined;

@@ -220,6 +220,19 @@ export function SettingsScreen() {
         </p>
       </section>
 
+      <section className="panel">
+        <span className="field-label">선수 영입</span>
+        <div className="toggles">
+          <Toggle
+            label="🎲 랜덤 뽑기"
+            desc="팀 화면에 실존 선수 랜덤 뽑기 카드를 보여줘요 (이적시장은 항상 쓸 수 있어요)"
+            on={settings.randomDraft}
+            onChange={(randomDraft) => update({ randomDraft })}
+            testId="toggle-random-draft"
+          />
+        </div>
+      </section>
+
       <aside className="notice-box">
         🔒 API 키는 <b>이 기기에만</b> 저장돼요. 다른 사람이 같은 주소로 접속해도 이 키를 쓸 수 없고,
         이 기기(홈 화면 앱)로 게임하는 사람만 이 키를 사용해요. AI 서버(구글/Anthropic)로만 직접 전송돼요. AI 사용량에 따라 요금이 나올 수 있으니 보호자 계정으로 관리해 주세요.

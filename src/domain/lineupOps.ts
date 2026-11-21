@@ -1,6 +1,6 @@
 import { onPitchIds } from './formations';
-import { GK_SLOT, movePosition } from './positions';
-import type { Lineup, Point } from './types';
+import { GK_SLOT, blockedMoveError, movePosition } from './positions';
+import type { Lineup, Player, Point } from './types';
 
 // ─────────────────────────────────────────────
 // 드래그앤드롭/탭 이동 규칙 (순수 함수 → 테스트 가능)
@@ -19,6 +19,8 @@ export interface MoveOptions {
   maxOnPitch: number;
   /** 다시 투입할 수 없는 선수 (교체아웃/퇴장) */
   unavailable: string[];
+  /** 벤치 선수를 빈 잔디에 놓을 때 골키퍼/필드 역할을 가리는 데 쓴다 (없으면 필드 선수로 본다) */
+  players?: Player[];
 }
 
 export interface MoveResult {
@@ -57,7 +59,10 @@ export function applyDrop(
   // ── 빈 잔디 위에 놓기
   if (target.kind === 'point') {
     // 경기장 선수: 그 자리로 위치만 이동 (언제나 자유)
-    if (fromSlot) return { lineup: movePosition(lineup, fromSlot, target.point) };
+    if (fromSlot) {
+      const blocked = blockedMoveError(lineup, fromSlot, target.point);
+      return blocked ? fail(blocked) : { lineup: movePosition(lineup, fromSlot, target.point) };
+    }
 
     // 벤치 선수: 비어 있는 자리가 있어야 들어갈 수 있다
     const empty = Object.keys(slots).filter((k) => !slots[k]);
@@ -66,7 +71,11 @@ export function applyDrop(
     if (opts.matchMode && onPitchIds(lineup).length >= opts.maxOnPitch) {
       return fail('퇴장으로 비어 있는 자리는 채울 수 없어요.');
     }
-    const slotId = empty.find((k) => k !== GK_SLOT) ?? empty[0];
+    const isKeeper = opts.players?.find((p) => p.id === playerId)?.role === 'GK';
+    const slotId = empty.find((k) => (k === GK_SLOT) === isKeeper);
+    if (!slotId) {
+      return fail(isKeeper ? '골키퍼 자리가 비어 있지 않아요. 바꿀 선수 위에 놓아 주세요.' : '골키퍼 자리가 비었어요. 골키퍼 선수를 놓아 주세요.');
+    }
     slots[slotId] = playerId;
     return { lineup: movePosition({ ...lineup, slots }, slotId, target.point) };
   }
@@ -83,11 +92,8 @@ export function applyDrop(
 
   // ── 벤치 → 경기장
   if (opts.matchMode) {
-    if (opts.subsLeft <= 0) return fail('교체 횟수를 모두 사용했어요.');
-    if (!occupant) {
-      const count = onPitchIds(lineup).length;
-      if (count >= opts.maxOnPitch) return fail('퇴장으로 비어 있는 자리는 채울 수 없어요.');
-    }
+    if (occupant && opts.subsLeft <= 0) return fail('교체 횟수를 모두 사용했어요.');
+    if (!occupant && onPitchIds(lineup).length >= opts.maxOnPitch) return fail('퇴장으로 비어 있는 자리는 채울 수 없어요.');
   }
   slots[target.slotId] = playerId;
   const result: MoveResult = { lineup: { ...lineup, slots } };

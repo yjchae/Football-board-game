@@ -34,8 +34,8 @@ describe('실존 선수 명단', () => {
     }
   });
 
-  it('8개 리그 모두 선수가 있고 OVR은 1~99 사이', () => {
-    expect(LEAGUES).toHaveLength(8);
+  it('15개 리그 모두 선수가 있고 OVR은 1~99 사이', () => {
+    expect(LEAGUES).toHaveLength(15);
     for (const league of LEAGUES) expect(REAL_PLAYERS.some((p) => p.league === league.id)).toBe(true);
     for (const p of REAL_PLAYERS) expect(p.overall).toBeGreaterThanOrEqual(1), expect(p.overall).toBeLessThanOrEqual(99);
   });

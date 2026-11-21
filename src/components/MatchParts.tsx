@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { changeFormation, FORMATIONS } from '../domain/formations';
+import { changeFormation, getFormation } from '../domain/formations';
 import { applyDrop } from '../domain/lineupOps';
 import { MAX_SUBS, type MatchSide } from '../domain/match';
 import type { EventType, HalfSummary, MatchEvent, Player, Side } from '../domain/types';
+import { FormationPicker } from './FormationPicker';
 import { LineupBoard } from './LineupBoard';
 import { PlayerAvatar } from './PlayerCard';
 
@@ -223,7 +224,7 @@ interface TacticsProps {
 
 export function TacticsPanel({ sides, onUpdate, beforeKickoff = false }: TacticsProps) {
   const [tab, setTab] = useState<Side>('home');
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string } | null>(null);
   const ms = sides[tab];
   const maxOnPitch = 11 - ms.sentOff.length;
   const name = (id: string) => ms.team.players.find((p) => p.id === id)?.name ?? '?';
@@ -239,28 +240,21 @@ export function TacticsPanel({ sides, onUpdate, beforeKickoff = false }: Tactics
         ))}
       </div>
       <div className="toolbar">
-        <div className="seg">
-          {FORMATIONS.map((f) => (
-            <button
-              key={f.id}
-              className={ms.lineup.formationId === f.id ? 'on' : ''}
-              onClick={() => {
-                // 같은 포메이션을 다시 누르면 기본 위치로만 되돌리고 중계 기록은 남기지 않는다
-                const changed = ms.lineup.formationId !== f.id;
-                const log = changed && !beforeKickoff ? `${ms.team.name} 포메이션 변경 → ${f.name}` : undefined;
-                onUpdate(tab, { ...ms, lineup: changeFormation(ms.lineup, ms.team.players, f.id) }, log);
-              }}
-            >
-              {f.name}
-            </button>
-          ))}
-        </div>
+        <FormationPicker
+          value={ms.lineup.formationId}
+          onPick={(id) => {
+            // 같은 포메이션을 다시 누르면 기본 위치로만 되돌리고 중계 기록은 남기지 않는다
+            const changed = ms.lineup.formationId !== id;
+            const log = changed && !beforeKickoff ? `${ms.team.name} 포메이션 변경 → ${getFormation(id).name}` : undefined;
+            onUpdate(tab, { ...ms, lineup: changeFormation(ms.lineup, ms.team.players, id) }, log);
+          }}
+        />
       </div>
-      {message && <p className="status status--error">{message}</p>}
       <LineupBoard
         players={ms.team.players}
         lineup={ms.lineup}
         color={ms.team.color}
+        error={message}
         unavailable={ms.unavailable}
         injured={ms.injured}
         benchTitle={beforeKickoff ? '벤치' : '벤치 (끌어서 교체)'}
@@ -271,8 +265,9 @@ export function TacticsPanel({ sides, onUpdate, beforeKickoff = false }: Tactics
             subsLeft: MAX_SUBS - ms.subsUsed,
             maxOnPitch,
             unavailable: ms.unavailable,
+            players: ms.team.players,
           });
-          setMessage(result.error ?? null);
+          setMessage(result.error ? { text: result.error.startsWith('퇴장으로') ? `퇴장으로 줄어든 인원은 채울 수 없어요(현재 최대 ${maxOnPitch}명)` : result.error } : null);
           if (result.error) return;
           if (result.sub) {
             const { inId, outId } = result.sub;
