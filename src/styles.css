@@ -250,6 +250,10 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
 .add-card--market { border-color: #b38cff; color: #b38cff; background: rgba(179, 140, 255, 0.05); }
 .market-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg-2); color: inherit; }
 .market-row.on { border-color: var(--accent); }
+/* 등급 색 카드는 밝은 배경이라 .market-row의 어두운 배경이 덮어쓰지 않게 한다 (글자는 어두운색) */
+.market-row.pcard--gold { background: var(--gold); }
+.market-row.pcard--silver { background: var(--silver); }
+.market-row.pcard--bronze { background: var(--bronze); }
 .market-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
 .market-row__info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .market-row__info small { color: var(--muted); }
