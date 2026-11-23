@@ -26,6 +26,7 @@ import {
   TACTIC_LINES,
   summaryTitle,
   YELLOW,
+  type Localized,
   type SummaryVars,
 } from './commentary';
 import { analyzeTactic, tacticModifiers, type Modifiers, type ParsedTactic } from './tactics';
@@ -72,6 +73,9 @@ type Plan =
   | { kind: 'injury' | 'corner' | 'offside' | 'mood'; minute: number; side: Side; player: Player };
 
 const other = (side: Side): Side => (side === 'home' ? 'away' : 'home');
+
+/** 세 언어 해설 → 이벤트의 text(한국어) / textEn(영어) / textId(인도네시아어) */
+const says = (line: Localized) => ({ text: line.ko, textEn: line.en, textId: line.id });
 
 export function createLocalEngine(rng: Rng = Math.random): MatchEngine {
   // 경기 하나 동안 같은 해설자가 문장 반복을 기억한다
@@ -173,7 +177,7 @@ function planSegment(ctx: SegmentContext, mods: Record<Side, Modifiers>, rng: Rn
  * 하프의 첫·마지막 구간에서 팀당 1번씩만 → 팀·하프당 최대 2번.
  * 문장은 분(minute)으로 고르므로 rng()를 쓰지 않는다 (난수 순서 보존).
  */
-function tacticLine(t: ParsedTactic, ctx: SegmentContext, minute: number, vars: { team: string; s: string }): string | undefined {
+function tacticLine(t: ParsedTactic, ctx: SegmentContext, minute: number, vars: { team: string; s: string }): Localized | undefined {
   const middleOfHalf = ctx.segment.start % 45 === 15;
   const key = t.keys[minute % Math.max(1, t.keys.length)];
   if (middleOfHalf || !key || key === 'balanced') return undefined;
@@ -202,7 +206,7 @@ function narrate(plans: Plan[], ctx: SegmentContext, tactics: Tactics, voice: Co
         score[p.side] += 1;
         const count = (goalsBy.get(p.shooter.id) ?? 0) + 1;
         goalsBy.set(p.shooter.id, count);
-        const text = goalText(voice, {
+        const line = goalText(voice, {
           shooter: p.shooter,
           assist: p.assist,
           keeper: p.keeper,
@@ -213,44 +217,44 @@ function narrate(plans: Plan[], ctx: SegmentContext, tactics: Tactics, voice: Co
           minute: p.minute,
           scoreText: `${score.home}:${score.away}`,
         });
-        push({ minute: p.minute, type: 'goal', side: p.side, playerId: p.shooter.id, assistId: p.assist?.id, text, highlight: true });
+        push({ minute: p.minute, type: 'goal', side: p.side, playerId: p.shooter.id, assistId: p.assist?.id, ...says(line), highlight: true });
         break;
       }
       case 'saved': {
         const v = shotVars(p.shooter, p.keeper, p.defender);
-        push({ minute: p.minute, type: 'shot', side: p.side, playerId: p.shooter.id, text: voice.pick('shot', SHOT_ON_TARGET, v), highlight: false });
-        push({ minute: p.minute, type: 'save', side: other(p.side), playerId: p.keeper.id, text: voice.pick('save', SAVE, v), highlight: rng() < 0.4 });
+        push({ minute: p.minute, type: 'shot', side: p.side, playerId: p.shooter.id, ...says(voice.pick('shot', SHOT_ON_TARGET, v)), highlight: false });
+        push({ minute: p.minute, type: 'save', side: other(p.side), playerId: p.keeper.id, ...says(voice.pick('save', SAVE, v)), highlight: rng() < 0.4 });
         break;
       }
       case 'miss': {
         const v = { ...shotVars(p.shooter, p.defender, p.defender), m: p.midfielder.name };
         const buildUp = rng() < 0.35;
-        let text = buildUp ? voice.pick('build', BUILD_UP, v) : voice.pick('miss', MISS, v);
+        let line = buildUp ? voice.pick('build', BUILD_UP, v) : voice.pick('miss', MISS, v);
         // 해설자는 원래대로 문장을 고른 뒤(난수 소비 동일), 전술 해설로 바꿔 끼운다
         const told = buildUp && !toldTactic.has(p.side) ? tacticLine(tactics[p.side], ctx, p.minute, v) : undefined;
         if (told) {
-          text = told;
+          line = told;
           toldTactic.add(p.side);
         }
-        push({ minute: p.minute, type: buildUp ? 'chance' : 'shot', side: p.side, playerId: p.shooter.id, text, highlight: false });
+        push({ minute: p.minute, type: buildUp ? 'chance' : 'shot', side: p.side, playerId: p.shooter.id, ...says(line), highlight: false });
         break;
       }
       case 'card': {
         const v = { team, p: p.player.name };
         const lines = p.type === 'red' ? RED : p.type === 'yellow' ? YELLOW : FOUL;
-        push({ minute: p.minute, type: p.type, side: p.side, playerId: p.player.id, text: voice.pick(p.type, lines, v), highlight: p.type === 'red' });
+        push({ minute: p.minute, type: p.type, side: p.side, playerId: p.player.id, ...says(voice.pick(p.type, lines, v)), highlight: p.type === 'red' });
         break;
       }
       case 'corner':
       case 'offside':
       case 'injury': {
         const lines = { corner: CORNER, offside: OFFSIDE, injury: INJURY }[p.kind];
-        push({ minute: p.minute, type: p.kind, side: p.side, playerId: p.player.id, text: voice.pick(p.kind, lines, { team, p: p.player.name }), highlight: false });
+        push({ minute: p.minute, type: p.kind, side: p.side, playerId: p.player.id, ...says(voice.pick(p.kind, lines, { team, p: p.player.name })), highlight: false });
         break;
       }
       case 'mood': {
         const v = { team, other: ctx[other(p.side)].teamName, p: p.player.name };
-        push({ minute: p.minute, type: 'info', side: null, text: voice.pick('mood', AMBIENCE, v), highlight: false });
+        push({ minute: p.minute, type: 'info', side: null, ...says(voice.pick('mood', AMBIENCE, v)), highlight: false });
         break;
       }
     }
@@ -296,5 +300,7 @@ function localSummary(ctx: SegmentContext, newEvents: MatchEvent[], voice: Comme
     saves,
     topKeeper: nameOf(keeperId),
   };
-  return { title: summaryTitle(voice, vars), text: summaryText(voice, vars), mvpPlayerId };
+  const title = summaryTitle(voice, vars);
+  const text = summaryText(voice, vars);
+  return { title: title.ko, titleEn: title.en, titleId: title.id, text: text.ko, textEn: text.en, textId: text.id, mvpPlayerId };
 }

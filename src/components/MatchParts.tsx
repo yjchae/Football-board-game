@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { Localized } from '../domain/commentary';
 import { changeFormation, getFormation } from '../domain/formations';
 import { applyDrop } from '../domain/lineupOps';
 import { MAX_SUBS, type MatchSide } from '../domain/match';
@@ -73,6 +74,28 @@ function TeamBadge({ side, align }: { side: MatchSide; align: 'left' | 'right' }
   );
 }
 
+// ─────────────── 번역 해설 (영어·인도네시아어) ───────────────
+
+/** 한국어 해설 아래에 붙는 영어·인도네시아어 해설 (없는 언어는 그리지 않는다) */
+function Translations({ en, id }: { en?: string; id?: string }) {
+  return (
+    <>
+      {en && (
+        <span className="tr-line" lang="en">
+          <span className="tr-line__tag">EN</span>
+          {en}
+        </span>
+      )}
+      {id && (
+        <span className="tr-line" lang="id">
+          <span className="tr-line__tag">ID</span>
+          {id}
+        </span>
+      )}
+    </>
+  );
+}
+
 // ─────────────── 중계 피드 ───────────────
 
 export function EventFeed({ events, sides }: { events: MatchEvent[]; sides: { home: MatchSide; away: MatchSide } }) {
@@ -89,7 +112,10 @@ export function EventFeed({ events, sides }: { events: MatchEvent[]; sides: { ho
           >
             <span className="feed__min">{e.minute}'</span>
             <span className="feed__icon">{EVENT_ICON[e.type]}</span>
-            <span className="feed__text">{e.text}</span>
+            <span className="feed__text">
+              {e.text}
+              <Translations en={e.textEn} id={e.textId} />
+            </span>
             {team && <span className="feed__team">{team.emoji}</span>}
           </li>
         );
@@ -118,7 +144,10 @@ export function Spotlight({ event, sides }: { event: MatchEvent; sides: { home: 
             </div>
           </div>
         )}
-        <p>{event.text}</p>
+        <p>
+          {event.text}
+          <Translations en={event.textEn} id={event.textId} />
+        </p>
       </div>
     </div>
   );
@@ -144,7 +173,10 @@ export function HighlightReel({ events, sides, title }: { events: MatchEvent[]; 
               </div>
               {player && <PlayerAvatar player={player} size={48} />}
               <b>{player?.name ?? team?.name}</b>
-              <p>{e.text}</p>
+              <p>
+                {e.text}
+                <Translations en={e.textEn} id={e.textId} />
+              </p>
             </div>
           );
         })}
@@ -172,11 +204,21 @@ export function HalfSummaryCard({ summary, sides }: { summary: HalfSummary; side
       <header>
         <span className="summary__tag">{summary.half === 1 ? '전반 정리' : '후반 정리'}</span>
         <h3>{summary.title}</h3>
+        {(summary.titleEn || summary.titleId) && (
+          <p className="summary__title-tr">
+            <Translations en={summary.titleEn} id={summary.titleId} />
+          </p>
+        )}
         <div className="summary__score">
           {sides.home.team.emoji} {summary.score.home} : {summary.score.away} {sides.away.team.emoji}
         </div>
       </header>
-      {summary.text && <p className="summary__text">{summary.text}</p>}
+      {summary.text && (
+        <p className="summary__text">
+          {summary.text}
+          <Translations en={summary.textEn} id={summary.textId} />
+        </p>
+      )}
       <div className="summary__body">
         <table className="stat-table">
           <thead>
@@ -217,7 +259,8 @@ export function HalfSummaryCard({ summary, sides }: { summary: HalfSummary; side
 
 interface TacticsProps {
   sides: { home: MatchSide; away: MatchSide };
-  onUpdate(side: Side, next: MatchSide, log?: string): void;
+  /** log: 중계 피드에 남길 기록 (한국어·영어·인도네시아어) */
+  onUpdate(side: Side, next: MatchSide, log?: Localized): void;
   /** 킥오프 전: 교체가 아니라 자유롭게 선발을 바꾸는 단계 */
   beforeKickoff?: boolean;
 }
@@ -245,7 +288,15 @@ export function TacticsPanel({ sides, onUpdate, beforeKickoff = false }: Tactics
           onPick={(id) => {
             // 같은 포메이션을 다시 누르면 기본 위치로만 되돌리고 중계 기록은 남기지 않는다
             const changed = ms.lineup.formationId !== id;
-            const log = changed && !beforeKickoff ? `${ms.team.name} 포메이션 변경 → ${getFormation(id).name}` : undefined;
+            const formation = getFormation(id).name;
+            const log: Localized | undefined =
+              changed && !beforeKickoff
+                ? {
+                    ko: `${ms.team.name} 포메이션 변경 → ${formation}`,
+                    en: `${ms.team.name} switch formation → ${formation}`,
+                    id: `${ms.team.name} mengganti formasi → ${formation}`,
+                  }
+                : undefined;
             onUpdate(tab, { ...ms, lineup: changeFormation(ms.lineup, ms.team.players, id) }, log);
           }}
         />
@@ -280,7 +331,11 @@ export function TacticsPanel({ sides, onUpdate, beforeKickoff = false }: Tactics
                 unavailable: [...ms.unavailable, outId],
                 injured: ms.injured.filter((id) => id !== outId),
               },
-              `선수 교체: ${name(outId)} OUT ➜ ${name(inId)} IN`,
+              {
+                ko: `선수 교체: ${name(outId)} OUT ➜ ${name(inId)} IN`,
+                en: `Substitution: ${name(outId)} OUT ➜ ${name(inId)} IN`,
+                id: `Pergantian pemain: ${name(outId)} OUT ➜ ${name(inId)} IN`,
+              },
             );
           } else {
             onUpdate(tab, { ...ms, lineup: result.lineup });

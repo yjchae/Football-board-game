@@ -80,4 +80,39 @@ describe('해설 문장', () => {
     expect(goals.length).toBeGreaterThan(0);
     for (const g of goals) expect(g.text).toMatch(/\(\d+:\d+\)/);
   });
+
+  it('모든 장면에 영어 해설이 함께 나오고, 빈 값·한글 조사가 새지 않는다', async () => {
+    const texts = new Set<string>();
+    for (let seed = 1; seed <= 20; seed++) {
+      for (const e of await playMatch(seed)) {
+        expect(e.textEn, e.text).toBeTruthy();
+        expect(e.textEn).not.toMatch(/undefined|null|NaN|\$\{|이\/가|을\/를/);
+        texts.add(e.textEn!);
+      }
+    }
+    expect(texts.size).toBeGreaterThan(150);
+  });
+
+  it('영어 골 해설에도 현재 점수가 들어간다', async () => {
+    const goals = (await playMatch(11)).filter((e) => e.type === 'goal');
+    for (const g of goals) expect(g.textEn).toMatch(/\(\d+:\d+\)/);
+  });
+
+  it('모든 장면에 인도네시아어 해설도 함께 나오고, 빈 값·한글 조사가 새지 않는다', async () => {
+    const texts = new Set<string>();
+    for (let seed = 1; seed <= 20; seed++) {
+      for (const e of await playMatch(seed)) {
+        expect(e.textId, e.text).toBeTruthy();
+        expect(e.textId).not.toMatch(/undefined|null|NaN|\$\{|이\/가|을\/를/);
+        expect(e.textId).not.toBe(e.textEn);
+        texts.add(e.textId!);
+      }
+    }
+    expect(texts.size).toBeGreaterThan(150);
+  });
+
+  it('인도네시아어 골 해설에도 현재 점수가 들어간다', async () => {
+    const goals = (await playMatch(11)).filter((e) => e.type === 'goal');
+    for (const g of goals) expect(g.textId).toMatch(/\(\d+:\d+\)/);
+  });
 });
