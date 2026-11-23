@@ -29,6 +29,10 @@ const isMissingModel = (msg: string) => /not found|404|is not supported|does not
 
 /** 언어별 캐스터 지시문 (본문에 섞으면 모델이 지시문까지 읽어서 systemInstruction으로 보낸다) */
 function casterInstruction(urgent: boolean, lang: VoiceLang): string {
+  if (lang === 'id') {
+    const style = urgent ? 'dengan suara pria yang berat dan lantang, berteriak penuh semangat' : 'dengan suara pria yang berat dan kuat, hidup dan bersemangat';
+    return `Bicaralah seperti komentator sepak bola Indonesia ${style}. Bacakan hanya kalimat yang diberikan persis seperti tertulis, dan jangan pernah membacakan instruksi ini.`;
+  }
   if (lang === 'en') {
     const style = urgent ? 'in a deep, booming male voice, shouting with excitement' : 'in a deep, strong male voice, lively and energetic';
     return `Speak like an English football match commentator ${style}. Read only the given sentence exactly as written, and never read these instructions aloud.`;

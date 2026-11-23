@@ -97,5 +97,22 @@ describe('soundFor', () => {
     expect(cue.lang).toBe('ko');
     expect(cue.speech).toBe('손흥민의 돌파!');
   });
-});
 
+  it('인도네시아어를 고르면 인도네시아어 해설을 외침·점수와 함께 읽는다', () => {
+    const goal = soundFor(
+      ev({ type: 'goal', text: '⚽ 손흥민 골!', textEn: '⚽ Son scores!', textId: '⚽ Son mencetak gol!' }),
+      { ...ctx, lang: 'id' },
+    );
+    expect(goal.lang).toBe('id');
+    expect(goal.speech).toMatch(/^Gol!|^Masuk!|^GOL!/);
+    expect(goal.speech).toContain('Son mencetak gol!');
+    expect(goal.speech).toContain('번개 FC 1, 불꽃 유나이티드 0');
+    expect(goal.speech).not.toContain('Son scores!');
+  });
+
+  it('인도네시아어를 골라도 인도네시아어 해설이 없는 장면은 한국어로 읽는다', () => {
+    const cue = soundFor(ev({ text: '💨 손흥민의 돌파!', textEn: 'Son breaks through!' }), { ...ctx, lang: 'id' });
+    expect(cue.lang).toBe('ko');
+    expect(cue.speech).toBe('손흥민의 돌파!');
+  });
+});

@@ -21,6 +21,7 @@ export /** 음성 해설 언어 선택지 (들어보기 문장 포함) */
 const VOICE_LANGS: { id: VoiceLang; label: string; sample: string }[] = [
   { id: 'ko', label: '🇰🇷 한국어', sample: '골! 골입니다! 멋진 슈팅으로 골망을 흔듭니다!' },
   { id: 'en', label: '🇺🇸 English', sample: 'Goal! What a goal! A brilliant strike into the back of the net!' },
+  { id: 'id', label: '🇮🇩 Indonesia', sample: 'Gol! Gol yang luar biasa! Tendangan keras masuk ke gawang!' },
 ];
 
 const SPEEDS = [
@@ -212,7 +213,7 @@ export function SettingsScreen() {
             </button>
           ))}
         </div>
-        <p className="muted small">화면에는 한국어와 영어 해설이 함께 나오고, 목소리는 고른 언어로만 읽어 줘요.</p>
+        <p className="muted small">화면에는 한국어·영어·인도네시아어 해설이 함께 나오고, 목소리는 고른 언어로만 읽어 줘요.</p>
         <button
           className="btn btn--ghost"
           data-testid="sfx-test"

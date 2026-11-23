@@ -6,7 +6,7 @@
 //  2) 키가 없거나 AI 목소리가 실패하면 → 브라우저 내장 음성 합성(Web Speech API)
 //     한국어 남자 목소리를 우선 찾고, 없으면 다른 한국어 목소리를 낮은 톤으로 읽는다.
 //
-//  언어: 문장마다 한국어(ko) 또는 영어(en)로 읽는다 (설정에서 고른 해설 언어)
+//  언어: 문장마다 한국어(ko)·영어(en)·인도네시아어(id) 중 하나로 읽는다 (설정에서 고른 해설 언어)
 
 //  공통 규칙
 //  - 밀린 문장이 쌓이지 않게 "대기 문장은 최대 1개"만 남긴다
@@ -49,11 +49,12 @@ const synth = (): SpeechSynthesis | null =>
 const MALE_HINTS: Record<VoiceLang, string[]> = {
   ko: ['male', 'injoon', 'hyunsu', 'bongjin', 'gookmin', 'minsu', 'jinho', 'junho', '남성', '남자'],
   en: ['male', 'daniel', 'alex', 'fred', 'aaron', 'arthur', 'gordon', 'rishi', 'david', 'guy', 'mark', 'george', 'ryan', 'thomas', 'oliver'],
+  id: ['male', 'ardi', 'pria', 'laki'],
 };
 const FEMALE_HINTS = ['female', '여성', '여자'];
 
 /** 언어별 기본 언어 태그 */
-const LANG_TAG: Record<VoiceLang, string> = { ko: 'ko-KR', en: 'en-US' };
+const LANG_TAG: Record<VoiceLang, string> = { ko: 'ko-KR', en: 'en-US', id: 'id-ID' };
 
 const isMaleVoice = (v: SpeechSynthesisVoice, lang: VoiceLang) => {
   const name = v.name.toLowerCase();
@@ -75,8 +76,8 @@ function pickVoice(s: SpeechSynthesis, lang: VoiceLang): { voice?: SpeechSynthes
  */
 let speakingUntil = 0;
 
-/** 낭독 시간 어림값: 한국어 글자당 약 0.13초, 영어 글자당 약 0.07초 + 여유 1초 */
-export const estimateSpeechMs = (text: string, lang: VoiceLang = 'ko') => 1000 + text.length * (lang === 'en' ? 70 : 130);
+/** 낭독 시간 어림값: 한국어 글자당 약 0.13초, 영어·인도네시아어(로마자) 글자당 약 0.07초 + 여유 1초 */
+export const estimateSpeechMs = (text: string, lang: VoiceLang = 'ko') => 1000 + text.length * (lang === 'ko' ? 130 : 70);
 
 function speakOnDevice(text: string, urgent: boolean, lang: VoiceLang): void {
   const s = synth();

@@ -26,7 +26,7 @@ import {
   TACTIC_LINES,
   summaryTitle,
   YELLOW,
-  type Bilingual,
+  type Localized,
   type SummaryVars,
 } from './commentary';
 import { analyzeTactic, tacticModifiers, type Modifiers, type ParsedTactic } from './tactics';
@@ -74,8 +74,8 @@ type Plan =
 
 const other = (side: Side): Side => (side === 'home' ? 'away' : 'home');
 
-/** 한국어·영어 해설 한 쌍 → 이벤트의 text(한국어) / textEn(영어) */
-const says = (line: Bilingual) => ({ text: line.ko, textEn: line.en });
+/** 세 언어 해설 → 이벤트의 text(한국어) / textEn(영어) / textId(인도네시아어) */
+const says = (line: Localized) => ({ text: line.ko, textEn: line.en, textId: line.id });
 
 export function createLocalEngine(rng: Rng = Math.random): MatchEngine {
   // 경기 하나 동안 같은 해설자가 문장 반복을 기억한다
@@ -177,7 +177,7 @@ function planSegment(ctx: SegmentContext, mods: Record<Side, Modifiers>, rng: Rn
  * 하프의 첫·마지막 구간에서 팀당 1번씩만 → 팀·하프당 최대 2번.
  * 문장은 분(minute)으로 고르므로 rng()를 쓰지 않는다 (난수 순서 보존).
  */
-function tacticLine(t: ParsedTactic, ctx: SegmentContext, minute: number, vars: { team: string; s: string }): Bilingual | undefined {
+function tacticLine(t: ParsedTactic, ctx: SegmentContext, minute: number, vars: { team: string; s: string }): Localized | undefined {
   const middleOfHalf = ctx.segment.start % 45 === 15;
   const key = t.keys[minute % Math.max(1, t.keys.length)];
   if (middleOfHalf || !key || key === 'balanced') return undefined;
@@ -302,5 +302,5 @@ function localSummary(ctx: SegmentContext, newEvents: MatchEvent[], voice: Comme
   };
   const title = summaryTitle(voice, vars);
   const text = summaryText(voice, vars);
-  return { title: title.ko, titleEn: title.en, text: text.ko, textEn: text.en, mvpPlayerId };
+  return { title: title.ko, titleEn: title.en, titleId: title.id, text: text.ko, textEn: text.en, textId: text.id, mvpPlayerId };
 }

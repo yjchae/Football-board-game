@@ -190,7 +190,7 @@ async function playFullMatch(page) {
   const page = await newPage({ aiVoice: false });
   await page.getByRole('button', { name: /AI 설정/ }).click();
   const langs = await page.getByTestId('voice-lang').getByRole('radio').allInnerTexts();
-  check(langs.join('|') === '🇰🇷 한국어|🇺🇸 English', `음성 해설 언어 선택지 (${langs.join(', ')})`);
+  check(langs.join('|') === '🇰🇷 한국어|🇺🇸 English|🇮🇩 Indonesia', `음성 해설 언어 선택지 (${langs.join(', ')})`);
   check((await page.getByRole('radio', { name: '🇰🇷 한국어' }).getAttribute('aria-checked')) === 'true', '음성 해설 언어 기본값 한국어');
   await page.getByRole('radio', { name: '🇺🇸 English' }).click();
   check((await page.getByRole('radio', { name: '🇺🇸 English' }).getAttribute('aria-checked')) === 'true', '영어 음성 해설 선택');
@@ -209,9 +209,24 @@ async function playFullMatch(page) {
 
   await page.locator('.full-log summary').click();
   const ko = await page.locator('.feed__text').first().innerText();
-  const en = await page.locator('.feed__text .en-line').count();
-  check(hangul.test(ko) && en > 0, `중계 피드에 한국어·영어 함께 표시 (영어 ${en}줄)`);
-  await page.screenshot({ path: 'e2e/screenshots/bilingual-feed.png', fullPage: false });
+  const en = await page.locator('.feed__text .tr-line[lang="en"]').count();
+  const id = await page.locator('.feed__text .tr-line[lang="id"]').count();
+  check(hangul.test(ko) && en > 0 && id > 0, `중계 피드에 한국어·영어·인도네시아어 함께 표시 (영어 ${en}줄, 인니어 ${id}줄)`);
+  await page.screenshot({ path: 'e2e/screenshots/multilingual-feed.png', fullPage: false });
+  await page.close();
+}
+
+// ─────────────── 인도네시아어 음성 해설 ───────────────
+{
+  const page = await newPage({ aiVoice: false, voiceLang: 'id' });
+  await page.getByText('연습용 팀 2개 불러오기').click();
+  await playFullMatch(page);
+  const audio = await page.evaluate(() => window.__audio);
+  check(audio.speech.some((t) => t.startsWith('Kick-off! Pertandingan dimulai')), '인도네시아어 킥오프 해설');
+  check(audio.speech.some((t) => t.startsWith('Peluit akhir pertandingan')), '인도네시아어 경기 종료 해설');
+  check(audio.langs.every((l) => l === 'id-ID'), `인도네시아어 해설은 인도네시아어 목소리로 (${[...new Set(audio.langs)].join(', ')})`);
+  const koreanSentence = /(어요|에요|예요|니다|해요|봐요)[.!?\s]|\d 대 \d/;
+  check(audio.speech.every((t) => !koreanSentence.test(t)), '인도네시아어 해설에 한국어 문장이 섞이지 않음');
   await page.close();
 }
 

@@ -69,6 +69,7 @@ export function sanitizeSegment(raw: unknown, ctx: SegmentContext): SegmentResul
     const minute = Math.round(Math.min(end, Math.max(start + 1, num(item.minute, start + 1))));
     const text = str(item.text).slice(0, 200) || '경기가 계속됩니다.';
     const textEn = str(item.textEn).slice(0, 300) || undefined;
+    const textId = str(item.textId).slice(0, 300) || undefined;
 
     events.push({
       id: eventId(),
@@ -79,6 +80,7 @@ export function sanitizeSegment(raw: unknown, ctx: SegmentContext): SegmentResul
       assistId,
       text,
       textEn,
+      textId,
       highlight: Boolean(item.highlight) || type === 'goal' || type === 'red',
     });
   }
@@ -97,6 +99,8 @@ export function sanitizeSegment(raw: unknown, ctx: SegmentContext): SegmentResul
       text: str(raw.summary.text).slice(0, 800),
       titleEn: str(raw.summary.titleEn).slice(0, 120) || undefined,
       textEn: str(raw.summary.textEn).slice(0, 1000) || undefined,
+      titleId: str(raw.summary.titleId).slice(0, 120) || undefined,
+      textId: str(raw.summary.textId).slice(0, 1000) || undefined,
       mvpPlayerId: known ? mvp : undefined,
     };
   }

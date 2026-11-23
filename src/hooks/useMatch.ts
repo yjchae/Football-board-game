@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
+import type { Localized } from '../domain/commentary';
 import {
   buildSideContext,
   computeStats,
@@ -56,7 +57,7 @@ export type Action =
   | { type: 'SEGMENT_END' }
   | { type: 'REQUEST_TIMEOUT' }
   | { type: 'RESUME' }
-  | { type: 'UPDATE_SIDE'; side: Side; next: MatchSide; log?: string; logEn?: string }
+  | { type: 'UPDATE_SIDE'; side: Side; next: MatchSide; log?: string; logEn?: string; logId?: string }
   | { type: 'CLEAR_SPOTLIGHT' }
   | { type: 'NOTICE'; text?: string }
   | { type: 'SET_TACTIC'; side: Side; half: Half; text: string };
@@ -131,6 +132,7 @@ function tacticChangeEvents(state: MatchState, minute: number): MatchEvent[] {
       side: null,
       text: `📋 ${state[side].team.name} 감독이 후반 전술을 바꿨어요!`,
       textEn: `📋 The ${state[side].team.name} coach has changed tactics for the second half!`,
+      textId: `📋 Pelatih ${state[side].team.name} mengubah taktik untuk babak kedua!`,
       highlight: false,
     }));
 }
@@ -144,8 +146,10 @@ function buildHalfSummary(state: MatchState): HalfSummary {
     half,
     title: ai?.title ?? `${half === 1 ? '전반전' : '후반전'} 종료`,
     titleEn: ai?.titleEn ?? (ai ? undefined : `End of the ${half === 1 ? 'first' : 'second'} half`),
+    titleId: ai?.titleId ?? (ai ? undefined : `Akhir babak ${half === 1 ? 'pertama' : 'kedua'}`),
     text: ai?.text ?? '',
     textEn: ai?.textEn,
+    textId: ai?.textId,
     mvpPlayerId: ai?.mvpPlayerId,
     score,
     stats: computeStats(halfEvents),
@@ -166,6 +170,7 @@ export function reducer(state: MatchState, action: Action): MatchState {
         side: null,
         text: segIndex === 0 ? '🎉 킥오프! 경기가 시작됩니다!' : '📣 후반전이 시작됩니다!',
         textEn: segIndex === 0 ? '🎉 Kick-off! The match is underway!' : '📣 The second half is underway!',
+        textId: segIndex === 0 ? '🎉 Kick-off! Pertandingan dimulai!' : '📣 Babak kedua dimulai!',
         highlight: false,
         cue: segIndex === 0 ? 'kickoff' : 'second-half',
       };
@@ -208,6 +213,7 @@ export function reducer(state: MatchState, action: Action): MatchState {
           side: null,
           text: seg.half === 1 ? '⏸️ 전반전 종료 휘슬!' : '🏁 경기 종료 휘슬!',
           textEn: seg.half === 1 ? '⏸️ Half-time whistle!' : '🏁 Full-time whistle!',
+          textId: seg.half === 1 ? '⏸️ Peluit turun minum!' : '🏁 Peluit akhir pertandingan!',
           highlight: false,
           cue: seg.half === 1 ? 'halftime' : 'fulltime',
         };
@@ -248,7 +254,7 @@ export function reducer(state: MatchState, action: Action): MatchState {
       const events = action.log
         ? [
             ...state.events,
-            { id: eventId(), minute: state.clock, type: 'sub' as const, side: action.side, text: action.log, textEn: action.logEn, highlight: false },
+            { id: eventId(), minute: state.clock, type: 'sub' as const, side: action.side, text: action.log, textEn: action.logEn, textId: action.logId, highlight: false },
           ]
         : state.events;
       return { ...state, [action.side]: action.next, events };
@@ -393,7 +399,8 @@ export function useMatch(
     requestTimeout: useCallback(() => dispatch({ type: 'REQUEST_TIMEOUT' }), []),
     resume: useCallback(() => dispatch({ type: 'RESUME' }), []),
     updateSide: useCallback(
-      (side: Side, next: MatchSide, log?: string, logEn?: string) => dispatch({ type: 'UPDATE_SIDE', side, next, log, logEn }),
+      (side: Side, next: MatchSide, log?: Localized) =>
+        dispatch({ type: 'UPDATE_SIDE', side, next, log: log?.ko, logEn: log?.en, logId: log?.id }),
       [],
     ),
     notice: useCallback((text?: string) => dispatch({ type: 'NOTICE', text }), []),

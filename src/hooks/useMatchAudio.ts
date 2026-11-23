@@ -15,7 +15,7 @@ interface Options {
   awayName: string;
   sfx: boolean;
   voice: boolean;
-  /** 음성 해설 언어 (화면에는 두 언어가 함께 나온다) */
+  /** 음성 해설 언어 (화면에는 세 언어가 함께 나온다) */
   voiceLang: VoiceLang;
   /** AI 남자 목소리에 쓸 제미나이 키 (null이면 기기 목소리) */
   voiceKey: string | null;

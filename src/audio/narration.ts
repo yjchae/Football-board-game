@@ -6,7 +6,7 @@ import type { SfxKind } from './sfx';
 //
 //  - 효과음: 시작·종료 휘슬 / 골 함성 / 파울 휘슬 / 슈팅·킥·드리블 소리 / 선방 탄성
 //  - 음성 해설: 화면 문장에서 이모지를 빼고, 골·종료 때는 점수를 덧붙여 더 생생하게
-//  - 화면에는 한국어·영어가 함께 나오지만, 소리로는 고른 언어(lang) 하나만 읽는다
+//  - 화면에는 한국어·영어·인도네시아어가 함께 나오지만, 소리로는 고른 언어(lang) 하나만 읽는다
 // ─────────────────────────────────────────────
 
 export interface NarrationContext {
@@ -57,24 +57,32 @@ export function stripForSpeech(text: string): string {
 }
 
 function scoreLine({ homeName, awayName, score, lang = 'ko' }: NarrationContext): string {
-  return lang === 'en'
-    ? `${homeName} ${score.home}, ${awayName} ${score.away}.`
-    : `${homeName} ${score.home} 대 ${score.away} ${awayName}.`;
+  if (lang === 'ko') return `${homeName} ${score.home} 대 ${score.away} ${awayName}.`;
+  // 영어·인도네시아어는 "팀 점수, 팀 점수" 순서로 읽는다
+  return `${homeName} ${score.home}, ${awayName} ${score.away}.`;
 }
 
 /** 골 장면 앞에 붙일 외침 (같은 말만 반복되지 않게 점수로 고른다) */
 const GOAL_SHOUTS: Record<VoiceLang, string[]> = {
   ko: ['골! 골! 골입니다!', '들어갔어요! 골입니다!', '골! 그물이 출렁입니다!'],
   en: ['Goal! Goal! Goal!', "It's in! What a goal!", 'GOAL! The net is bulging!'],
+  id: ['Gol! Gol! Gol!', 'Masuk! Gol yang indah!', 'GOL! Jala bergetar!'],
 };
 
-/** 실제로 읽게 될 언어 (영어를 골라도 영어 해설이 없는 장면은 한국어로 읽는다) */
-export const spokenLang = (event: MatchEvent, lang: VoiceLang = 'ko'): VoiceLang => (lang === 'en' && event.textEn ? 'en' : 'ko');
+/** 장면의 해설 문장을 언어별로 꺼낸다 (그 언어 해설이 없으면 undefined) */
+export function textIn(event: MatchEvent, lang: VoiceLang): string | undefined {
+  if (lang === 'en') return event.textEn;
+  if (lang === 'id') return event.textId;
+  return event.text;
+}
+
+/** 실제로 읽게 될 언어 (고른 언어의 해설이 없는 장면은 한국어로 읽는다) */
+export const spokenLang = (event: MatchEvent, lang: VoiceLang = 'ko'): VoiceLang => (textIn(event, lang) ? lang : 'ko');
 
 export function soundFor(event: MatchEvent, input: NarrationContext): SoundCue {
   const lang = spokenLang(event, input.lang);
   const ctx = { ...input, lang };
-  const body = stripForSpeech(lang === 'en' ? event.textEn! : event.text);
+  const body = stripForSpeech(textIn(event, lang) ?? event.text);
 
   if (event.type === 'goal') {
     const shouts = GOAL_SHOUTS[lang];
