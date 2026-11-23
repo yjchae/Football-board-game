@@ -3,7 +3,7 @@ import { soundFor } from '../audio/narration';
 import { configureNarrator, isNarrating, narrate, stopNarration } from '../audio/narrator';
 import { playSfx } from '../audio/sfx';
 import { scoreOf } from '../domain/match';
-import type { MatchEvent } from '../domain/types';
+import type { MatchEvent, VoiceLang } from '../domain/types';
 
 // ─────────────────────────────────────────────
 // 경기 화면에 새로 공개된 이벤트마다 효과음·음성 해설을 낸다
@@ -15,11 +15,13 @@ interface Options {
   awayName: string;
   sfx: boolean;
   voice: boolean;
+  /** 음성 해설 언어 (화면에는 두 언어가 함께 나온다) */
+  voiceLang: VoiceLang;
   /** AI 남자 목소리에 쓸 제미나이 키 (null이면 기기 목소리) */
   voiceKey: string | null;
 }
 
-export function useMatchAudio({ events, homeName, awayName, sfx, voice, voiceKey }: Options) {
+export function useMatchAudio({ events, homeName, awayName, sfx, voice, voiceLang, voiceKey }: Options) {
   const played = useRef(events.length);
 
   // 이벤트보다 먼저 목소리 설정을 반영해야 첫 해설부터 AI 목소리로 읽는다
@@ -31,11 +33,11 @@ export function useMatchAudio({ events, homeName, awayName, sfx, voice, voiceKey
     fresh.forEach((event, i) => {
       // 이 이벤트까지의 점수 (한 번에 여러 개가 공개돼도 각자 맞는 점수로)
       const score = scoreOf(events.slice(0, events.length - fresh.length + i + 1));
-      const cue = soundFor(event, { homeName, awayName, score });
+      const cue = soundFor(event, { homeName, awayName, score, lang: voiceLang });
       if (sfx && cue.sfx) playSfx(cue.sfx);
-      if (voice && cue.speech) narrate(cue.speech, { urgent: cue.urgent });
+      if (voice && cue.speech) narrate(cue.speech, { urgent: cue.urgent, lang: cue.lang });
     });
-  }, [events, homeName, awayName, sfx, voice]);
+  }, [events, homeName, awayName, sfx, voice, voiceLang]);
 
   // 해설을 끄거나 경기 화면을 떠나면 바로 멈춘다
   useEffect(() => {

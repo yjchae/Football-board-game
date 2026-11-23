@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS: AiSettings = {
   sfx: true,
   voice: true,
   aiVoice: true,
+  voiceLang: 'ko',
   randomDraft: true,
 };
 

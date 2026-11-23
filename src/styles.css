@@ -389,6 +389,10 @@ input[type='range'] { accent-color: var(--accent); width: 100%; }
 .feed__icon { font-size: 1.2rem; }
 .feed__team { font-size: 1.2rem; }
 
+/* 영어 해설: 한국어 아래에 한 단계 작고 흐리게 */
+.en-line { display: block; margin-top: 4px; font-size: 0.86em; font-weight: 400; line-height: 1.45; color: var(--muted); letter-spacing: 0.01em; }
+.summary__title-en { margin: 0 0 6px; color: var(--muted); font-size: 0.95rem; }
+
 /* 하이라이트 연출 */
 .spotlight { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; pointer-events: none; padding: 16px; }
 .spotlight__burst { position: absolute; inset: -50%; background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--team) 35%, transparent) 0 8deg, transparent 8deg 20deg); animation: spin 6s linear infinite, fade 0.3s; opacity: 0.6; }

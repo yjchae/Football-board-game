@@ -6,12 +6,15 @@
 //  2) 키가 없거나 AI 목소리가 실패하면 → 브라우저 내장 음성 합성(Web Speech API)
 //     한국어 남자 목소리를 우선 찾고, 없으면 다른 한국어 목소리를 낮은 톤으로 읽는다.
 //
+//  언어: 문장마다 한국어(ko) 또는 영어(en)로 읽는다 (설정에서 고른 해설 언어)
+
 //  공통 규칙
 //  - 밀린 문장이 쌓이지 않게 "대기 문장은 최대 1개"만 남긴다
 //  - 골처럼 급한 장면(urgent)은 말하던 것을 끊고 바로 읽는다
 // ─────────────────────────────────────────────
 
 import { isFatalVoiceError, isQuotaError, synthesizeMale } from './cloudVoice';
+import type { VoiceLang } from '../domain/types';
 import { getContext, wakeUp } from './sfx';
 
 // ─────────────── 설정 ───────────────
@@ -40,23 +43,29 @@ const synth = (): SpeechSynthesis | null =>
   typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null;
 
 /**
- * 기기별로 알려진 한국어 남자 목소리 이름 일부.
+ * 기기별로 알려진 남자 목소리 이름 일부 (언어별).
  * Web Speech API는 성별 정보를 주지 않아서 이름으로 짐작한다.
  */
-const MALE_HINTS = ['male', 'injoon', 'hyunsu', 'bongjin', 'gookmin', 'minsu', 'jinho', 'junho', '남성', '남자'];
+const MALE_HINTS: Record<VoiceLang, string[]> = {
+  ko: ['male', 'injoon', 'hyunsu', 'bongjin', 'gookmin', 'minsu', 'jinho', 'junho', '남성', '남자'],
+  en: ['male', 'daniel', 'alex', 'fred', 'aaron', 'arthur', 'gordon', 'rishi', 'david', 'guy', 'mark', 'george', 'ryan', 'thomas', 'oliver'],
+};
 const FEMALE_HINTS = ['female', '여성', '여자'];
 
-const isMaleVoice = (v: SpeechSynthesisVoice) => {
+/** 언어별 기본 언어 태그 */
+const LANG_TAG: Record<VoiceLang, string> = { ko: 'ko-KR', en: 'en-US' };
+
+const isMaleVoice = (v: SpeechSynthesisVoice, lang: VoiceLang) => {
   const name = v.name.toLowerCase();
-  return MALE_HINTS.some((h) => name.includes(h)) && !FEMALE_HINTS.some((h) => name.includes(h));
+  return MALE_HINTS[lang].some((h) => name.includes(h)) && !FEMALE_HINTS.some((h) => name.includes(h));
 };
 
 /** 해설에 쓸 기기 목소리와, 그 목소리가 남자 목소리인지 */
-function pickVoice(s: SpeechSynthesis): { voice?: SpeechSynthesisVoice; male: boolean } {
-  const korean = s.getVoices().filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith('ko'));
-  const male = korean.find(isMaleVoice);
+function pickVoice(s: SpeechSynthesis, lang: VoiceLang): { voice?: SpeechSynthesisVoice; male: boolean } {
+  const matching = s.getVoices().filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith(lang));
+  const male = matching.find((v) => isMaleVoice(v, lang));
   if (male) return { voice: male, male: true };
-  return { voice: korean.find((v) => v.lang === 'ko-KR') ?? korean[0], male: false };
+  return { voice: matching.find((v) => v.lang === LANG_TAG[lang]) ?? matching[0], male: false };
 }
 
 /**
@@ -66,10 +75,10 @@ function pickVoice(s: SpeechSynthesis): { voice?: SpeechSynthesisVoice; male: bo
  */
 let speakingUntil = 0;
 
-/** 한국어 낭독 시간 어림값: 글자당 약 0.13초 + 여유 1초 */
-export const estimateSpeechMs = (text: string) => 1000 + text.length * 130;
+/** 낭독 시간 어림값: 한국어 글자당 약 0.13초, 영어 글자당 약 0.07초 + 여유 1초 */
+export const estimateSpeechMs = (text: string, lang: VoiceLang = 'ko') => 1000 + text.length * (lang === 'en' ? 70 : 130);
 
-function speakOnDevice(text: string, urgent: boolean): void {
+function speakOnDevice(text: string, urgent: boolean, lang: VoiceLang): void {
   const s = synth();
   if (!s) return;
   // 급한 장면이거나 이미 한 문장이 대기 중이면 밀린 해설을 버린다
@@ -78,15 +87,15 @@ function speakOnDevice(text: string, urgent: boolean): void {
     s.cancel();
   }
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'ko-KR';
-  const { voice, male } = pickVoice(s);
+  const { voice, male } = pickVoice(s, lang);
+  u.lang = voice?.lang ?? LANG_TAG[lang];
   if (voice) u.voice = voice;
   // 남자 목소리가 없는 기기는 톤을 크게 낮춰 남자 해설자 느낌을 낸다
   const basePitch = male ? 0.95 : 0.6;
   // 골 장면은 조금 더 빠르고 높게 → 흥분한 해설 느낌
   u.rate = urgent ? 1.15 : 1.05;
   u.pitch = urgent ? basePitch + 0.15 : basePitch;
-  speakingUntil = Math.max(speakingUntil, Date.now()) + estimateSpeechMs(text);
+  speakingUntil = Math.max(speakingUntil, Date.now()) + estimateSpeechMs(text, lang);
   u.onend = u.onerror = () => {
     if (!s.speaking && !s.pending) speakingUntil = 0;
   };
@@ -103,6 +112,7 @@ const deviceBusy = () => {
 interface Line {
   text: string;
   urgent: boolean;
+  lang: VoiceLang;
   /** 미리 만들기 시작한 음성 (앞 문장을 읽는 동안 받아 둔다) */
   audio: Promise<AudioBuffer>;
 }
@@ -115,12 +125,12 @@ let queued: Line | null = null;
 let cloudDeadline = 0;
 
 /** AI 음성 받기 최대 대기(8초) + 재생 시간 여유 */
-const cloudBudgetMs = (text: string) => 8000 + estimateSpeechMs(text) * 1.5;
+const cloudBudgetMs = (line: Line) => 8000 + estimateSpeechMs(line.text, line.lang) * 1.5;
 
 function startLine(ac: AudioContext, key: string, line: Line): void {
   const my = generation;
   current = { line };
-  cloudDeadline = Date.now() + cloudBudgetMs(line.text);
+  cloudDeadline = Date.now() + cloudBudgetMs(line);
   void line.audio.then(
     async (buffer) => {
       if (my !== generation) return;
@@ -138,7 +148,7 @@ function startLine(ac: AudioContext, key: string, line: Line): void {
       if (my !== generation) return;
       onCloudError(err);
       current = null;
-      speakOnDevice(line.text, line.urgent); // 이 문장은 기기 목소리로
+      speakOnDevice(line.text, line.urgent, line.lang); // 이 문장은 기기 목소리로
       next(ac, key);
     },
   );
@@ -151,12 +161,12 @@ function next(ac: AudioContext, key: string): void {
   queued = null;
   if (!line) return;
   if (cloudReady()) startLine(ac, key, line);
-  else speakOnDevice(line.text, line.urgent);
+  else speakOnDevice(line.text, line.urgent, line.lang);
 }
 
-function narrateWithCloud(ac: AudioContext, key: string, text: string, urgent: boolean): void {
+function narrateWithCloud(ac: AudioContext, key: string, text: string, urgent: boolean, lang: VoiceLang): void {
   if (urgent) stopNarration();
-  const line: Line = { text, urgent, audio: synthesizeMale(ac, key, text, urgent) };
+  const line: Line = { text, urgent, lang, audio: synthesizeMale(ac, key, text, urgent, lang) };
   line.audio.catch(() => undefined); // 처리 안 된 오류 경고 막기 (실패는 startLine에서 처리)
   if (current) queued = line; // 대기 문장은 1개만 (예전 대기 문장은 버린다)
   else startLine(ac, key, line);
@@ -194,9 +204,9 @@ export function unlockNarration(): void {
   s.speak(silent);
 }
 
-export function narrate(text: string, { urgent = false } = {}): void {
+export function narrate(text: string, { urgent = false, lang = 'ko' as VoiceLang } = {}): void {
   if (!text) return;
   const ac = getContext();
-  if (cloudKey && ac && cloudReady()) narrateWithCloud(ac, cloudKey, text, urgent);
-  else speakOnDevice(text, urgent);
+  if (cloudKey && ac && cloudReady()) narrateWithCloud(ac, cloudKey, text, urgent, lang);
+  else speakOnDevice(text, urgent, lang);
 }

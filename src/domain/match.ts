@@ -69,7 +69,7 @@ export interface SegmentContext {
 export interface SegmentResult {
   events: MatchEvent[];
   /** 하프 마지막 구간일 때만: 하프 정리 글 */
-  summary?: { title: string; text: string; mvpPlayerId?: string };
+  summary?: { title: string; text: string; titleEn?: string; textEn?: string; mvpPlayerId?: string };
 }
 
 export interface MatchEngine {

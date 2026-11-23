@@ -73,6 +73,18 @@ function TeamBadge({ side, align }: { side: MatchSide; align: 'left' | 'right' }
   );
 }
 
+// ─────────────── 영어 해설 한 줄 ───────────────
+
+/** 한국어 해설 아래에 붙는 영어 해설 (없으면 아무것도 그리지 않는다) */
+function EnLine({ text }: { text?: string }) {
+  if (!text) return null;
+  return (
+    <span className="en-line" lang="en">
+      {text}
+    </span>
+  );
+}
+
 // ─────────────── 중계 피드 ───────────────
 
 export function EventFeed({ events, sides }: { events: MatchEvent[]; sides: { home: MatchSide; away: MatchSide } }) {
@@ -89,7 +101,10 @@ export function EventFeed({ events, sides }: { events: MatchEvent[]; sides: { ho
           >
             <span className="feed__min">{e.minute}'</span>
             <span className="feed__icon">{EVENT_ICON[e.type]}</span>
-            <span className="feed__text">{e.text}</span>
+            <span className="feed__text">
+              {e.text}
+              <EnLine text={e.textEn} />
+            </span>
             {team && <span className="feed__team">{team.emoji}</span>}
           </li>
         );
@@ -118,7 +133,10 @@ export function Spotlight({ event, sides }: { event: MatchEvent; sides: { home: 
             </div>
           </div>
         )}
-        <p>{event.text}</p>
+        <p>
+          {event.text}
+          <EnLine text={event.textEn} />
+        </p>
       </div>
     </div>
   );
@@ -144,7 +162,10 @@ export function HighlightReel({ events, sides, title }: { events: MatchEvent[]; 
               </div>
               {player && <PlayerAvatar player={player} size={48} />}
               <b>{player?.name ?? team?.name}</b>
-              <p>{e.text}</p>
+              <p>
+                {e.text}
+                <EnLine text={e.textEn} />
+              </p>
             </div>
           );
         })}
@@ -172,11 +193,17 @@ export function HalfSummaryCard({ summary, sides }: { summary: HalfSummary; side
       <header>
         <span className="summary__tag">{summary.half === 1 ? '전반 정리' : '후반 정리'}</span>
         <h3>{summary.title}</h3>
+        {summary.titleEn && <p className="summary__title-en" lang="en">{summary.titleEn}</p>}
         <div className="summary__score">
           {sides.home.team.emoji} {summary.score.home} : {summary.score.away} {sides.away.team.emoji}
         </div>
       </header>
-      {summary.text && <p className="summary__text">{summary.text}</p>}
+      {summary.text && (
+        <p className="summary__text">
+          {summary.text}
+          <EnLine text={summary.textEn} />
+        </p>
+      )}
       <div className="summary__body">
         <table className="stat-table">
           <thead>
@@ -217,7 +244,8 @@ export function HalfSummaryCard({ summary, sides }: { summary: HalfSummary; side
 
 interface TacticsProps {
   sides: { home: MatchSide; away: MatchSide };
-  onUpdate(side: Side, next: MatchSide, log?: string): void;
+  /** log·logEn: 중계 피드에 남길 한국어·영어 기록 */
+  onUpdate(side: Side, next: MatchSide, log?: string, logEn?: string): void;
   /** 킥오프 전: 교체가 아니라 자유롭게 선발을 바꾸는 단계 */
   beforeKickoff?: boolean;
 }
@@ -245,8 +273,10 @@ export function TacticsPanel({ sides, onUpdate, beforeKickoff = false }: Tactics
           onPick={(id) => {
             // 같은 포메이션을 다시 누르면 기본 위치로만 되돌리고 중계 기록은 남기지 않는다
             const changed = ms.lineup.formationId !== id;
-            const log = changed && !beforeKickoff ? `${ms.team.name} 포메이션 변경 → ${getFormation(id).name}` : undefined;
-            onUpdate(tab, { ...ms, lineup: changeFormation(ms.lineup, ms.team.players, id) }, log);
+            const logged = changed && !beforeKickoff;
+            const log = logged ? `${ms.team.name} 포메이션 변경 → ${getFormation(id).name}` : undefined;
+            const logEn = logged ? `${ms.team.name} switch formation → ${getFormation(id).name}` : undefined;
+            onUpdate(tab, { ...ms, lineup: changeFormation(ms.lineup, ms.team.players, id) }, log, logEn);
           }}
         />
       </div>
@@ -281,6 +311,7 @@ export function TacticsPanel({ sides, onUpdate, beforeKickoff = false }: Tactics
                 injured: ms.injured.filter((id) => id !== outId),
               },
               `선수 교체: ${name(outId)} OUT ➜ ${name(inId)} IN`,
+              `Substitution: ${name(outId)} OUT ➜ ${name(inId)} IN`,
             );
           } else {
             onUpdate(tab, { ...ms, lineup: result.lineup });

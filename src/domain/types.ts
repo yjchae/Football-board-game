@@ -92,7 +92,10 @@ export interface MatchEvent {
   side: Side | null;
   playerId?: string;
   assistId?: string;
+  /** 한국어 해설 */
   text: string;
+  /** 영어 해설 (없으면 한국어만 보여 준다) */
+  textEn?: string;
   /** 하이라이트 장면 여부 */
   highlight: boolean;
   /** 휘슬 효과음을 낼 경기 흐름 신호 (킥오프·하프 종료 등) */
@@ -106,6 +109,9 @@ export interface HalfSummary {
   half: 1 | 2;
   title: string;
   text: string;
+  /** 영어 제목·정리 (없으면 한국어만) */
+  titleEn?: string;
+  textEn?: string;
   mvpPlayerId?: string;
   score: { home: number; away: number };
   stats: MatchStats;
@@ -128,6 +134,9 @@ export interface MatchStats {
 
 // ─────────────── AI 설정 ───────────────
 
+/** 음성 해설을 읽어 줄 언어 */
+export type VoiceLang = 'ko' | 'en';
+
 export type EngineKind = 'gemini' | 'claude' | 'local';
 
 export interface AiSettings {
@@ -144,6 +153,8 @@ export interface AiSettings {
   voice: boolean;
   /** 음성 해설을 제미나이 AI 남자 목소리로 (제미나이 키 필요, 없으면 기기 목소리) */
   aiVoice: boolean;
+  /** 음성 해설 언어 (화면에는 한국어·영어가 함께 나온다) */
+  voiceLang: VoiceLang;
   /** 팀 화면에서 랜덤 선수 뽑기 카드를 보여줄지 */
   randomDraft: boolean;
 }

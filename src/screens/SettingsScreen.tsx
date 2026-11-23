@@ -3,7 +3,7 @@ import { AiError, listGeminiModels, testConnection } from '../ai/engine';
 import { configureNarrator, narrate, stopNarration } from '../audio/narrator';
 import { playSfx, releaseSfx, unlockSfx } from '../audio/sfx';
 import { InstallGuide } from '../components/InstallGuide';
-import type { EngineKind } from '../domain/types';
+import type { EngineKind, VoiceLang } from '../domain/types';
 import { DEFAULT_SETTINGS, useStore } from '../store/useStore';
 
 // ─────────────────────────────────────────────
@@ -17,7 +17,13 @@ const ENGINES: { value: EngineKind; title: string; desc: string }[] = [
 ];
 
 /** 중계 속도 = 장면 하나를 보여 주는 시간 (기존 저장값 2200·1400·700은 그대로 유지) */
-export const SPEEDS = [
+export /** 음성 해설 언어 선택지 (들어보기 문장 포함) */
+const VOICE_LANGS: { id: VoiceLang; label: string; sample: string }[] = [
+  { id: 'ko', label: '🇰🇷 한국어', sample: '골! 골입니다! 멋진 슈팅으로 골망을 흔듭니다!' },
+  { id: 'en', label: '🇺🇸 English', sample: 'Goal! What a goal! A brilliant strike into the back of the net!' },
+];
+
+const SPEEDS = [
   { ms: 4500, label: '아주 천천히' },
   { ms: 3200, label: '천천히' },
   { ms: 2200, label: '조금 천천히' },
@@ -192,6 +198,21 @@ export function SettingsScreen() {
             testId="toggle-ai-voice"
           />
         </div>
+        <span className="field-label">🗣️ 음성 해설 언어</span>
+        <div className="seg" role="radiogroup" aria-label="음성 해설 언어" data-testid="voice-lang">
+          {VOICE_LANGS.map((l) => (
+            <button
+              key={l.id}
+              role="radio"
+              aria-checked={settings.voiceLang === l.id}
+              className={settings.voiceLang === l.id ? 'on' : ''}
+              onClick={() => update({ voiceLang: l.id })}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+        <p className="muted small">화면에는 한국어와 영어 해설이 함께 나오고, 목소리는 고른 언어로만 읽어 줘요.</p>
         <button
           className="btn btn--ghost"
           data-testid="sfx-test"
@@ -209,7 +230,8 @@ export function SettingsScreen() {
             unlockSfx(); // AI 목소리도 효과음과 같은 오디오로 재생된다
             stopNarration();
             configureNarrator(settings.aiVoice ? settings.geminiKey : null);
-            narrate('골! 골입니다! 멋진 슈팅으로 골망을 흔듭니다!', { urgent: true });
+            const sample = VOICE_LANGS.find((l) => l.id === settings.voiceLang) ?? VOICE_LANGS[0];
+            narrate(sample.sample, { urgent: true, lang: sample.id });
           }}
         >
           🎙️ 해설 목소리 들어보기
