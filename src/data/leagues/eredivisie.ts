@@ -26,7 +26,6 @@ export const EREDIVISIE = rows('EREDIVISIE', [
   ['스벤 미나스', 'AZ', 'CAM', 'MF', 78],
   ['메스 더비트', 'AZ', 'CM', 'MF', 76],
   // 공격
-  ['요한 바카요코', 'PSV', 'RW', 'FW', 80],
   ['이반 페리시치', 'PSV', 'LW', 'FW', 79],
   ['루크 더용', 'PSV', 'ST', 'FW', 76],
   ['리카르도 페피', 'PSV', 'ST', 'FW', 76],
