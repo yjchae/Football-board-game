@@ -81,3 +81,21 @@ describe('해설 문장', () => {
     for (const g of goals) expect(g.text).toMatch(/\(\d+:\d+\)/);
   });
 });
+
+describe('자책골·페널티킥 실축', () => {
+  it('100경기 중에 자책골과 페널티킥 실축이 나오고, 자책골도 점수에 들어간다', async () => {
+    let ownGoals = 0;
+    let pkFails = 0;
+    let pkGoals = 0;
+    for (let seed = 1; seed <= 100; seed++) {
+      const events = await playMatch(seed);
+      const og = events.filter((e) => e.type === 'goal' && !e.playerId);
+      ownGoals += og.length;
+      for (const g of og) expect(g.text).toMatch(/\(\d+:\d+\)/);
+      pkFails += events.filter((e) => (e.type === 'save' || e.type === 'shot') && /페널티킥/.test(e.text) && e.highlight).length;
+      pkGoals += events.filter((e) => e.type === 'goal' && /페널티킥/.test(e.text)).length;
+    }
+    expect(ownGoals).toBeGreaterThan(0);
+    expect(pkFails).toBeGreaterThan(0);
+  });
+});

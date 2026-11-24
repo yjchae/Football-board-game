@@ -16,7 +16,7 @@ export function buildMatchRecord(
   playedAt: Date = new Date(),
 ): MatchRecord {
   const nameOf = (e: MatchEvent) =>
-    (e.side && sides[e.side].team.players.find((p) => p.id === e.playerId)?.name) || '알 수 없음';
+    (e.side && sides[e.side].team.players.find((p) => p.id === e.playerId)?.name) || (e.playerId ? '알 수 없음' : '자책골');
 
   return {
     id,

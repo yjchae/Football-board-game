@@ -19,6 +19,9 @@ import {
   INJURY,
   MISS,
   OFFSIDE,
+  OWN_GOAL,
+  PK_MISS,
+  PK_SAVE,
   RED,
   SAVE,
   SHOT_ON_TARGET,
@@ -66,8 +69,9 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 // 1단계에서 정하는 "무슨 일이 일어났는지" (아직 문장 없음)
 type Plan =
   | { kind: 'goal'; minute: number; side: Side; shooter: Player; assist?: Player; keeper?: Player }
-  | { kind: 'saved'; minute: number; side: Side; shooter: Player; keeper: Player; defender: Player }
-  | { kind: 'miss'; minute: number; side: Side; shooter: Player; defender: Player; midfielder: Player }
+  | { kind: 'ownGoal'; minute: number; side: Side; defender: Player }
+  | { kind: 'saved'; minute: number; side: Side; shooter: Player; keeper: Player; defender: Player; penalty: boolean }
+  | { kind: 'miss'; minute: number; side: Side; shooter: Player; defender: Player; midfielder: Player; penalty: boolean }
   | { kind: 'card'; minute: number; side: Side; type: 'foul' | 'yellow' | 'red'; player: Player }
   | { kind: 'injury' | 'corner' | 'offside' | 'mood'; minute: number; side: Side; player: Player };
 
@@ -131,15 +135,19 @@ function planSegment(ctx: SegmentContext, mods: Record<Side, Modifiers>, rng: Rn
       const m = minute();
 
       if (roll < goalChance) {
-        const assist = pickPlayer(me, ['MF', 'FW'], rng, shooter.id);
-        plans.push({ kind: 'goal', minute: m, side, shooter, assist, keeper });
+        // 골 중 일부는 상대 수비수의 자책골 (골 확률 자체는 그대로)
+        const og = rng() < 0.05 ? defender() : undefined;
+        if (og) plans.push({ kind: 'ownGoal', minute: m, side, defender: og });
+        else plans.push({ kind: 'goal', minute: m, side, shooter, assist: pickPlayer(me, ['MF', 'FW'], rng, shooter.id), keeper });
       } else if (roll < goalChance + 0.25 && keeper) {
-        plans.push({ kind: 'saved', minute: m, side, shooter, keeper, defender: defender() ?? keeper });
+        // 막힌 슈팅 일부는 골키퍼가 막아낸 페널티킥
+        plans.push({ kind: 'saved', minute: m, side, shooter, keeper, defender: defender() ?? keeper, penalty: rng() < 0.005 });
       } else {
         const d = defender() ?? keeper ?? shooter;
         // 패스를 주는 선수는 슈팅한 선수와 다른 사람으로
         const passer = pickPlayer(me, ['MF'], rng, shooter.id) ?? pickPlayer(me, ['DF', 'FW'], rng, shooter.id) ?? shooter;
-        plans.push({ kind: 'miss', minute: m, side, shooter, defender: d, midfielder: passer });
+        // 빗나간 슈팅 일부는 페널티킥 실축
+        plans.push({ kind: 'miss', minute: m, side, shooter, defender: d, midfielder: passer, penalty: rng() < 0.005 });
       }
     }
 
@@ -216,14 +224,28 @@ function narrate(plans: Plan[], ctx: SegmentContext, tactics: Tactics, voice: Co
         push({ minute: p.minute, type: 'goal', side: p.side, playerId: p.shooter.id, assistId: p.assist?.id, text, highlight: true });
         break;
       }
+      case 'ownGoal': {
+        score[p.side] += 1;
+        const v = { d: p.defender.name, team, other: ctx[other(p.side)].teamName, score: `${score.home}:${score.away}` };
+        push({ minute: p.minute, type: 'goal', side: p.side, text: voice.pick('owngoal', OWN_GOAL, v), highlight: true });
+        break;
+      }
       case 'saved': {
         const v = shotVars(p.shooter, p.keeper, p.defender);
+        if (p.penalty) {
+          push({ minute: p.minute, type: 'save', side: other(p.side), playerId: p.keeper.id, text: voice.pick('pk-save', PK_SAVE, v), highlight: true });
+          break;
+        }
         push({ minute: p.minute, type: 'shot', side: p.side, playerId: p.shooter.id, text: voice.pick('shot', SHOT_ON_TARGET, v), highlight: false });
         push({ minute: p.minute, type: 'save', side: other(p.side), playerId: p.keeper.id, text: voice.pick('save', SAVE, v), highlight: rng() < 0.4 });
         break;
       }
       case 'miss': {
         const v = { ...shotVars(p.shooter, p.defender, p.defender), m: p.midfielder.name };
+        if (p.penalty) {
+          push({ minute: p.minute, type: 'shot', side: p.side, playerId: p.shooter.id, text: voice.pick('pk-miss', PK_MISS, v), highlight: true });
+          break;
+        }
         const buildUp = rng() < 0.35;
         let text = buildUp ? voice.pick('build', BUILD_UP, v) : voice.pick('miss', MISS, v);
         // 해설자는 원래대로 문장을 고른 뒤(난수 소비 동일), 전술 해설로 바꿔 끼운다
