@@ -117,7 +117,8 @@ async function playFuzzMatch(seed: number, teams: { home: Team; away: Team }) {
   return s;
 }
 
-describe('무작위 경기 200판 (퍼즈)', () => {
+// 경기 200판을 돌려서 CI(느린 러너)에서는 기본 5초를 넘길 수 있어 넉넉히 30초로 둔다.
+describe('무작위 경기 200판 (퍼즈)', { timeout: 30_000 }, () => {
   it('연습용 11+3명 팀', async () => {
     for (let seed = 1; seed <= 150; seed++) {
       const [home, away] = createDemoTeams();

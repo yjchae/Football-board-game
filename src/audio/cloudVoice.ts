@@ -9,6 +9,8 @@
 //  - 같은 문장은 다시 만들지 않게 최근 것을 기억해 둔다
 // ─────────────────────────────────────────────
 
+import type { VoiceLang } from '../domain/types';
+
 /** 써 볼 음성 합성 모델 (앞에서부터 시도, 없는 모델이면 다음 것) */
 const TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts', 'gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts'];
 
@@ -25,11 +27,24 @@ let workingModel: string | null = null;
 /** 모델이 없거나 지원하지 않는다는 오류인지 */
 const isMissingModel = (msg: string) => /not found|404|is not supported|does not support/i.test(msg);
 
-async function requestPcm(apiKey: string, text: string, urgent: boolean): Promise<Uint8Array> {
+/** 언어별 캐스터 지시문 (본문에 섞으면 모델이 지시문까지 읽어서 systemInstruction으로 보낸다) */
+function casterInstruction(urgent: boolean, lang: VoiceLang): string {
+  if (lang === 'id') {
+    const style = urgent ? 'dengan suara pria yang berat dan lantang, berteriak penuh semangat' : 'dengan suara pria yang berat dan kuat, hidup dan bersemangat';
+    return `Bicaralah seperti komentator sepak bola Indonesia ${style}. Bacakan hanya kalimat yang diberikan persis seperti tertulis, dan jangan pernah membacakan instruksi ini.`;
+  }
+  if (lang === 'en') {
+    const style = urgent ? 'in a deep, booming male voice, shouting with excitement' : 'in a deep, strong male voice, lively and energetic';
+    return `Speak like an English football match commentator ${style}. Read only the given sentence exactly as written, and never read these instructions aloud.`;
+  }
+  const style = urgent ? '낮고 굵은 중저음 남자 목소리로 흥분해서 크게 외치듯이' : '낮고 굵은 중저음 남자 목소리로 생생하고 힘 있게';
+  return `한국 축구 중계 캐스터처럼 ${style} 말하세요. 주어진 문장만 그대로 읽고, 이 지시는 소리 내어 읽지 마세요.`;
+}
+
+async function requestPcm(apiKey: string, text: string, urgent: boolean, lang: VoiceLang): Promise<Uint8Array> {
   const { GoogleGenAI, Modality } = await import('@google/genai');
   const ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: TIMEOUT_MS, apiVersion: 'v1beta' } }); // 음성 설정(speechConfig)은 v1beta에서만 받는다
-  const style = urgent ? '낮고 굵은 중저음 남자 목소리로 흥분해서 크게 외치듯이' : '낮고 굵은 중저음 남자 목소리로 생생하고 힘 있게';
-  const instruction = `한국 축구 중계 캐스터처럼 ${style} 말하세요. 주어진 문장만 그대로 읽고, 이 지시는 소리 내어 읽지 마세요.`; // 본문에 섞으면 모델이 지시문까지 읽는다
+  const instruction = casterInstruction(urgent, lang);
 
   const models = workingModel ? [workingModel] : TTS_MODELS;
   let lastError: unknown;
@@ -80,15 +95,15 @@ const CACHE_SIZE = 40;
 const cache = new Map<string, Promise<AudioBuffer>>();
 
 /** 문장을 남자 목소리 음성으로 만든다 (실패하면 오류를 던진다) */
-export function synthesizeMale(ac: AudioContext, apiKey: string, text: string, urgent: boolean): Promise<AudioBuffer> {
-  const key = `${urgent ? '!' : ''}${text}`;
+export function synthesizeMale(ac: AudioContext, apiKey: string, text: string, urgent: boolean, lang: VoiceLang = 'ko'): Promise<AudioBuffer> {
+  const key = `${lang}|${urgent ? '!' : ''}${text}`;
   const hit = cache.get(key);
   if (hit) {
     cache.delete(key); // 최근에 쓴 것으로 옮긴다
     cache.set(key, hit);
     return hit;
   }
-  const job = requestPcm(apiKey, text, urgent).then((pcm) => pcmToBuffer(ac, pcm));
+  const job = requestPcm(apiKey, text, urgent, lang).then((pcm) => pcmToBuffer(ac, pcm));
   job.catch(() => cache.delete(key)); // 실패한 건 기억하지 않는다
   cache.set(key, job);
   if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value!);

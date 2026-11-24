@@ -76,4 +76,43 @@ describe('soundFor', () => {
     expect(() => narrate('테스트')).not.toThrow();
     expect(isNarrating()).toBe(false);
   });
+
+  it('영어를 고르면 영어 해설을 영어 외침·점수와 함께 읽는다', () => {
+    const en = { ...ctx, lang: 'en' as const };
+    const goal = soundFor(ev({ type: 'goal', text: '⚽ 손흥민 골!', textEn: '⚽ Son scores!' }), en);
+    expect(goal.lang).toBe('en');
+    expect(goal.speech).toContain('Son scores!');
+    expect(goal.speech).toContain('번개 FC 1, 불꽃 유나이티드 0');
+    expect(goal.speech).not.toMatch(/손흥민|대/);
+  });
+
+  it('영어를 골라도 영어 해설이 없는 장면은 한국어로 읽는다', () => {
+    const cue = soundFor(ev({ text: '💨 손흥민의 돌파!' }), { ...ctx, lang: 'en' });
+    expect(cue.lang).toBe('ko');
+    expect(cue.speech).toBe('손흥민의 돌파!');
+  });
+
+  it('한국어를 고르면 영어 해설이 있어도 한국어로 읽는다', () => {
+    const cue = soundFor(ev({ text: '💨 손흥민의 돌파!', textEn: 'Son breaks through!' }), ctx);
+    expect(cue.lang).toBe('ko');
+    expect(cue.speech).toBe('손흥민의 돌파!');
+  });
+
+  it('인도네시아어를 고르면 인도네시아어 해설을 외침·점수와 함께 읽는다', () => {
+    const goal = soundFor(
+      ev({ type: 'goal', text: '⚽ 손흥민 골!', textEn: '⚽ Son scores!', textId: '⚽ Son mencetak gol!' }),
+      { ...ctx, lang: 'id' },
+    );
+    expect(goal.lang).toBe('id');
+    expect(goal.speech).toMatch(/^Gol!|^Masuk!|^GOL!/);
+    expect(goal.speech).toContain('Son mencetak gol!');
+    expect(goal.speech).toContain('번개 FC 1, 불꽃 유나이티드 0');
+    expect(goal.speech).not.toContain('Son scores!');
+  });
+
+  it('인도네시아어를 골라도 인도네시아어 해설이 없는 장면은 한국어로 읽는다', () => {
+    const cue = soundFor(ev({ text: '💨 손흥민의 돌파!', textEn: 'Son breaks through!' }), { ...ctx, lang: 'id' });
+    expect(cue.lang).toBe('ko');
+    expect(cue.speech).toBe('손흥민의 돌파!');
+  });
 });

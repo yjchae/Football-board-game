@@ -15,6 +15,7 @@ export const MATCH_SYSTEM_PROMPT = `너는 어린이를 위한 축구 보드게�
 - 15분 구간에 골은 보통 0~2개. 이벤트는 4~9개.
 - 반드시 주어진 선수 id만 사용하고, 그 선수가 실제로 경기장에 있는 팀(side)과 맞춰.
 - 문장은 한국어, 초등학생이 읽기 쉽고 신나는 해설 말투. 폭력적이거나 무서운 표현은 금지.
+- 모든 이벤트에 같은 내용의 영어 해설 "textEn"과 인도네시아어 해설 "textId"도 함께 넣어. 각 언어의 축구 중계 캐스터처럼 쉽고 신나는 말투로, 선수·팀 이름은 주어진 표기 그대로 써.
 - 골, 결정적 선방, 퇴장 같은 명장면은 highlight: true.
 - type은 goal, shot, save, chance, foul, yellow, red, injury, corner, offside 중 하나.
 - save 이벤트의 side와 playerId는 막아낸 골키퍼 쪽이야.
@@ -105,7 +106,7 @@ export function buildSegmentPrompt(ctx: SegmentContext): string {
     .join('\n');
 
   const summaryRule = ctx.isLastOfHalf
-    ? `\n이 구간은 ${half === 1 ? '전반전' : '후반전'}의 마지막이야. "summary" 필드에 ${half === 1 ? '전반' : '후반'} 정리를 넣어줘 (title: 한 줄 제목, text: 3~4문장 정리, mvpPlayerId: 이 하프의 MVP 선수 id).`
+    ? `\n이 구간은 ${half === 1 ? '전반전' : '후반전'}의 마지막이야. "summary" 필드에 ${half === 1 ? '전반' : '후반'} 정리를 넣어줘 (title: 한 줄 제목, text: 3~4문장 정리, titleEn·textEn: 같은 내용의 영어, titleId·textId: 같은 내용의 인도네시아어, mvpPlayerId: 이 하프의 MVP 선수 id).`
     : '';
 
   const tacticBlock = buildTacticBlock(ctx);
@@ -121,8 +122,8 @@ ${start + 1}분부터 ${end}분까지의 이벤트를 만들어줘.${summaryRule
 JSON 형식:
 {
   "events": [
-    { "minute": ${start + 3}, "type": "shot", "side": "home", "playerId": "선수id", "assistId": "선택", "text": "해설 문장", "highlight": false }
-  ]${ctx.isLastOfHalf ? `,\n  "summary": { "title": "...", "text": "...", "mvpPlayerId": "선수id" }` : ''}
+    { "minute": ${start + 3}, "type": "shot", "side": "home", "playerId": "선수id", "assistId": "선택", "text": "해설 문장", "textEn": "English commentary", "textId": "Komentar bahasa Indonesia", "highlight": false }
+  ]${ctx.isLastOfHalf ? `,\n  "summary": { "title": "...", "text": "...", "titleEn": "...", "textEn": "...", "titleId": "...", "textId": "...", "mvpPlayerId": "선수id" }` : ''}
 }`;
 }
 

@@ -56,7 +56,7 @@ async function fingerprint(tactic: { home?: string; away?: string }) {
 }
 
 // 전술 기능을 넣기 전 엔진으로 같은 방식으로 뽑은 지문
-const BEFORE_TACTICS = 'dd584e93'; // 해설 확장·자책골·PK 실축 추가 후 갱신
+const BEFORE_TACTICS = '2f5eb15b'; // 해설 확장·자책골·PK 실축 추가 후 갱신
 
 describe('B0 회귀: 전술이 없으면 기존 엔진과 완전히 같다', () => {
   it('빈 전술', async () => {

@@ -140,6 +140,7 @@ function LiveMatch({ matchId, home, away, onExit }: { matchId: string; home: Tea
     awayName: away.name,
     sfx: settings.sfx,
     voice: settings.voice,
+    voiceLang: settings.voiceLang,
     voiceKey: settings.aiVoice ? settings.geminiKey : null,
   });
   const soundOn = settings.sfx || settings.voice;
